@@ -214,8 +214,6 @@ module api 'br/public:avm/res/web/site:0.21.0' = {
 
 output SERVICE_API_NAME string = api.outputs.name
 output SERVICE_MCP_DEFAULT_HOSTNAME string = api.outputs.defaultHostname
-// Ensure output is always string, handle potential null from module output if SystemAssigned is not used
-output SERVICE_API_IDENTITY_PRINCIPAL_ID string = identityType == 'SystemAssigned' ? api.outputs.?systemAssignedMIPrincipalId ?? '' : ''
 
 // Authorization outputs
 var scopeValues = [for scope in authExposedScopes: scope.value]
