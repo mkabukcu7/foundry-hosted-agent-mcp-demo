@@ -1,0 +1,9 @@
+name: foundry-hosted-agent-mcp-demo
+metadata:
+  template: foundry-hosted-agent-mcp-demo@0.0.1
+services:
+  mcp-server:
+    project: ./mcp-server
+    language: python
+    host: function
+    dist: .azure/mcp-server
