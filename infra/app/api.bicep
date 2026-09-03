@@ -62,8 +62,8 @@ var queueSettings = enableQueue ? { AzureWebJobsStorage__queueServiceUri: stg.pr
 var tableSettings = enableTable ? { AzureWebJobsStorage__tableServiceUri: stg.properties.primaryEndpoints.table } : {}
 var fileSettings = enableFile ? { AzureWebJobsStorage__fileServiceUri: stg.properties.primaryEndpoints.file } : {}
 
-// Create auth-specific app settings when auth parameters are provided
-var authAppSettings = (!empty(authIdentifierUri) && !empty(identityClientId)) ? {
+// Create auth-specific app settings only when Easy Auth is configured
+var authAppSettings = (!empty(authClientId) && !empty(authIdentifierUri) && !empty(authTenantId) && !empty(identityClientId)) ? {
   WEBSITE_AUTH_PRM_DEFAULT_WITH_SCOPES: '${authIdentifierUri}/user_impersonation'
   OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID: identityClientId
   WEBSITE_AUTH_AAD_ALLOWED_TENANTS: authTenantId

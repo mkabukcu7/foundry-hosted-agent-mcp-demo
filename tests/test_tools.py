@@ -6,9 +6,16 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("mcp_server", ROOT / "mcp-server/server.py")
 mcp = importlib.util.module_from_spec(spec); spec.loader.exec_module(mcp)
-sys.modules["server"] = mcp
-function_spec = importlib.util.spec_from_file_location("function_app", ROOT / "mcp-server/function_app.py")
-function_app = importlib.util.module_from_spec(function_spec); function_spec.loader.exec_module(function_app)
+previous_server_module = sys.modules.get("server")
+try:
+    sys.modules["server"] = mcp
+    function_spec = importlib.util.spec_from_file_location("function_app", ROOT / "mcp-server/function_app.py")
+    function_app = importlib.util.module_from_spec(function_spec); function_spec.loader.exec_module(function_app)
+finally:
+    if previous_server_module is None:
+        sys.modules.pop("server", None)
+    else:
+        sys.modules["server"] = previous_server_module
 from agent.agent import HostedAgent
 
 class ToolTests(unittest.TestCase):
