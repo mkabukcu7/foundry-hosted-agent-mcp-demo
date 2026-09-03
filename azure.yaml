@@ -1,9 +1,49 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
 name: foundry-hosted-agent-mcp-demo
 metadata:
-  template: foundry-hosted-agent-mcp-demo@0.0.1
+    template: foundry-hosted-agent-mcp-demo@0.0.1
+infra:
+    path: infra
 services:
-  mcp-server:
-    project: ./mcp-server
-    language: python
-    host: function
-    dist: .azure/mcp-server
+    foundry-project:
+        host: azure.ai.project
+        endpoint: ${FOUNDRY_PROJECT_ENDPOINT}
+    hwc-governed-agent:
+        project: ./agent
+        host: azure.ai.agent
+        language: python
+        uses:
+            - foundry-project
+            - mcp-server
+        codeConfiguration:
+            dependencyResolution: remote_build
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        kind: hosted
+        name: hwc-governed-agent
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+        env:
+            AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+            MCP_SERVER_URL: https://${SERVICE_API_DEFAULT_HOSTNAME}/runtime/webhooks/mcp
+            MCP_AUDIENCE: ${ENTRA_IDENTIFIER_URI}
+            ENABLE_SENSITIVE_DATA: "false"
+            ENABLE_MESSAGE_EVENTS: "false"
+            ENABLE_CONSOLE_EXPORTERS: "false"
+            AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED: "false"
+            ENABLE_A365_OBSERVABILITY: "false"
+    mcp-server:
+        project: ./mcp-server
+        host: function
+        language: python
+        dist: ../.azure/mcp-server
+        hooks:
+            prepackage:
+                kind: python
+                run: ../scripts/package_mcp.py

@@ -1,0 +1,7 @@
+agent-framework-foundry
+agent-framework-foundry-hosting>=1.0.0a260630
+azure-identity>=1.17.0
+httpx>=0.27.0
+python-dotenv>=1.0.0
+debugpy
+opentelemetry-exporter-otlp-proto-grpc>=1.39.0
