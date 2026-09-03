@@ -21,7 +21,8 @@ class Handler(BaseHTTPRequestHandler):
             result = HostedAgent().respond(prompt)
             data = json.dumps(result).encode(); self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
         except Exception:
-            self.send_response(502); self.end_headers()
+            data = json.dumps({"error": {"type": "upstream_error", "message": "Unable to complete the response request."}}).encode()
+            self.send_response(502); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
     def log_message(self, fmt, *args): return
 
 def run(host="127.0.0.1", port=8000):

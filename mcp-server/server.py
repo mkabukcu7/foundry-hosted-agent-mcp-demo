@@ -14,6 +14,10 @@ TOOLS = [
 ]
 STATE = copy.deepcopy(BUSINESS)
 
+def reset_state():
+    STATE.clear()
+    STATE.update(copy.deepcopy(BUSINESS))
+
 def call_tool(name, arguments):
     arguments = arguments or {}
     if name == "search_hwc_knowledge":
@@ -53,6 +57,9 @@ class MCPHandler(BaseHTTPRequestHandler):
         expected = os.getenv("MCP_AUTH_TOKEN")
         if expected and self.headers.get("Authorization") != "Bearer " + expected:
             return self._send(401, {"error": "unauthorized", "correlation_id": correlation_id})
+        if self.path == "/reset":
+            reset_state()
+            return self._send(200, {"status": "ok", "correlation_id": correlation_id})
         try:
             request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
             method = request.get("method")
@@ -64,7 +71,8 @@ class MCPHandler(BaseHTTPRequestHandler):
                 raise ValueError("Unsupported MCP method")
             self._send(200, {"jsonrpc": "2.0", "id": request.get("id"), "result": result, "correlation_id": correlation_id})
         except (ValueError, KeyError, json.JSONDecodeError) as exc:
-            self._send(400, {"jsonrpc": "2.0", "id": request.get("id") if "request" in locals() else None, "error": {"code": -32602, "message": str(exc)}, "correlation_id": correlation_id})
+            message = exc.args[0] if exc.args else str(exc)
+            self._send(400, {"jsonrpc": "2.0", "id": request.get("id") if "request" in locals() else None, "error": {"code": -32602, "message": message}, "correlation_id": correlation_id})
     def log_message(self, fmt, *args):
         return
 
