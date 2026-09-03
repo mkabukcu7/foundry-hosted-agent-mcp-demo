@@ -83,7 +83,7 @@ Exact demo prompts:
 Flow A discovers tools, reads structured data and knowledge, and returns
 source identifiers. Flow B prepares an action with `PENDING_APPROVAL`; no
 execution endpoint exists until a human approval mechanism is added.
-Reset state with `python scripts\reset_demo.py` or restart the MCP server.
+Reset state by restarting the MCP server.
 
 ## Tests
 
@@ -129,4 +129,4 @@ proposal-only and use synthetic in-memory state.
   managed MCP host on x64 Windows, WSL/Linux, or a supported container host.
 * Remote `401`: verify Easy Auth configuration and the agent managed-identity
   token audience.
-* Stale demo state: run `python scripts/reset_demo.py` or restart services.
+* Stale demo state: restart the MCP server.
