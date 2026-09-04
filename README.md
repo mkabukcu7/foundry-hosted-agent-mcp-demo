@@ -79,9 +79,9 @@ agent\.venv\Scripts\python.exe scripts\start_local.py
 
 Exact demo prompts:
 
-1. “Summarize the current position for the demo entity CASE-1001. Identify the
+1. “Summarize the current position for the demo entity HWC-1001. Identify the
    primary exception and show your sources.”
-2. “Prepare a follow-up action for the demo entity CASE-1001 addressing the primary exception.
+2. “Prepare a follow-up action for the demo entity HWC-1001 addressing the primary exception.
    Do not execute it without approval.”
 
 Flow A discovers tools, reads structured data and knowledge, and returns

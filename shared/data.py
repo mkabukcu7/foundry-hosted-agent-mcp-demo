@@ -7,12 +7,22 @@ back to the in-memory demo set otherwise.
 """
 
 import copy
-import json
 import os
+import re
 import struct
 from datetime import date, datetime
 
 from azure.identity import DefaultAzureCredential
+
+
+_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _validate_sql_identifier(value, name):
+    value = str(value).strip() if value is not None else ""
+    if not value or not _NAME_RE.fullmatch(value):
+        raise ValueError(f"{name} must be an unqualified SQL identifier.")
+    return value
 
 
 def _normalise_record(record):
@@ -28,10 +38,9 @@ def _normalise_record(record):
     record.setdefault("current_status", record.get("status", "Unknown"))
     record.setdefault("risks", [record["primary_risk"]] if record.get("primary_risk") else [])
     record.setdefault("recent_activity", [])
-    record.setdefault("important_metrics", {})
-
     if "important_metrics" not in record and "metrics" in record:
         record["important_metrics"] = record["metrics"]
+    record.setdefault("important_metrics", {})
 
     if "supporting_sources" not in record and "source_ids" in record:
         record["supporting_sources"] = record["source_ids"]
@@ -49,32 +58,6 @@ def _json_value(value):
         return [_json_value(item) for item in value]
     return value
 
-
-def _fabric_table_path():
-    workspace_id = os.getenv("FABRIC_WORKSPACE_ID")
-    lakehouse_id = os.getenv("FABRIC_LAKEHOUSE_ID")
-    table = os.getenv("FABRIC_TABLE", "exception_tracking")
-    schema = os.getenv("FABRIC_SCHEMA", "dbo")
-    if not workspace_id or not lakehouse_id:
-        raise RuntimeError("FABRIC_WORKSPACE_ID and FABRIC_LAKEHOUSE_ID are required for Fabric data access.")
-    return workspace_id, lakehouse_id, f"{lakehouse_id}/Tables/{schema}/{table}"
-
-
-def _active_delta_files(files, log_root):
-    active = set()
-    for path in sorted(files):
-        if not path.endswith(".json") or "/_delta_log/" not in path:
-            continue
-        payload = log_root.get_file_client(path).download_file().readall().decode("utf-8")
-        for line in payload.splitlines():
-            action = json.loads(line)
-            if "add" in action:
-                active.add(action["add"]["path"])
-            elif "remove" in action:
-                active.discard(action["remove"]["path"])
-    return sorted(active)
-
-
 def _query_fabric():
     """Read the governed summary view from the Fabric SQL analytics endpoint."""
     if os.getenv("HWC_DATA_SOURCE", "synthetic").lower() != "fabric":
@@ -82,14 +65,14 @@ def _query_fabric():
 
     server = os.getenv("FABRIC_SQL_ENDPOINT")
     database = os.getenv("FABRIC_SQL_DATABASE", os.getenv("FABRIC_LAKEHOUSE_NAME", ""))
-    view = os.getenv("FABRIC_SUMMARY_VIEW", "vw_exception_summary")
+    view = _validate_sql_identifier(os.getenv("FABRIC_SUMMARY_VIEW", "vw_exception_summary"), "FABRIC_SUMMARY_VIEW")
     if not server or not database:
         raise RuntimeError("FABRIC_SQL_ENDPOINT and FABRIC_SQL_DATABASE are required for Fabric data access.")
 
     credential = DefaultAzureCredential()
     token = credential.get_token("https://database.windows.net/.default").token
-    token_bytes = token.encode("utf-8")
-    token_struct = struct.pack("=i", len(token_bytes)) + token_bytes
+    token_bytes = token.encode("utf-16le")
+    token_struct = struct.pack("<I", len(token_bytes)) + token_bytes
 
     import pyodbc
 

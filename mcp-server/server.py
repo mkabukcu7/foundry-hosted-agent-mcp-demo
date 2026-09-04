@@ -2,7 +2,7 @@
 
 import copy
 
-from shared.data import BUSINESS, KNOWLEDGE, get_business_records
+from shared.data import KNOWLEDGE, get_business_records
 from shared.validation import optional_positive_int, required_text
 
 TOOLS = [
@@ -30,14 +30,14 @@ def call_tool(name, arguments):
     if name == "get_business_summary":
         entity_id = required_text(arguments.get("entity_id"), "entity_id").upper()
         if entity_id not in STATE:
-            raise KeyError(f"No governed entity found for {entity_id}")
+            raise KeyError(f"No entity found for {entity_id}")
         return copy.deepcopy(STATE[entity_id])
     if name == "prepare_follow_up_action":
         entity_id = required_text(arguments.get("entity_id"), "entity_id").upper()
         action_type = required_text(arguments.get("action_type"), "action_type")
         instructions = required_text(arguments.get("instructions"), "instructions")
         if entity_id not in STATE:
-            raise KeyError(f"No governed entity found for {entity_id}")
+            raise KeyError(f"No entity found for {entity_id}")
         return {"proposed_action": f"{action_type}: {instructions}", "affected_system": "HWC governed exception tracker", "risk_level": "medium", "approval_requirement": "Explicit human approval required", "execution_status": "PENDING_APPROVAL", "entity_id": entity_id}
     raise KeyError(f"Unknown tool: {name}")
 

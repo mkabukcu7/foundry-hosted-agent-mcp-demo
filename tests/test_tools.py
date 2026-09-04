@@ -49,7 +49,7 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(action["execution_status"], "PENDING_APPROVAL")
         self.assertIn("approval", action["approval_requirement"].lower())
 
-    def test_fabric_data_source_uses_lakehouse_summary(self):
+    def test_fabric_data_source_normalizes_rows_from_query(self):
         with patch.dict(
             "os.environ",
             {
