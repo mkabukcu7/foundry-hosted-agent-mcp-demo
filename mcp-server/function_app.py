@@ -41,6 +41,12 @@ def search_hwc_knowledge(
 
 
 @app.mcp_tool()
+def list_business_summaries() -> list[dict]:
+    """List all governed HWC client or process summaries."""
+    return call_tool("list_business_summaries", {})
+
+
+@app.mcp_tool()
 @app.mcp_tool_property(
     arg_name="entity_id",
     description="The fictional HWC client or process identifier.",

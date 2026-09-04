@@ -20,6 +20,13 @@ finally:
 from agent.agent import HostedAgent
 
 class ToolTests(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict("os.environ", {"HWC_DATA_SOURCE": "synthetic"})
+        environment.start()
+        self.addCleanup(environment.stop)
+        mcp.STATE.clear()
+        mcp.STATE.update(mcp.get_business_records.__globals__["BUSINESS"])
+
     def test_functions_register_managed_mcp_triggers(self):
         functions = function_app.app.get_functions()
         self.assertEqual(
@@ -34,7 +41,11 @@ class ToolTests(unittest.TestCase):
         )
 
     def test_discovery_has_all_tools(self):
-        self.assertEqual({tool["name"] for tool in mcp.TOOLS}, {"search_hwc_knowledge", "get_business_summary", "prepare_follow_up_action"})
+        self.assertEqual({tool["name"] for tool in mcp.TOOLS}, {"search_hwc_knowledge", "list_business_summaries", "get_business_summary", "prepare_follow_up_action"})
+
+    def test_lists_all_business_summaries(self):
+        summaries = mcp.call_tool("list_business_summaries", {})
+        self.assertEqual([item["entity_id"] for item in summaries], ["HWC-1001"])
 
     def test_search_and_empty_results(self):
         self.assertEqual(len(mcp.call_tool("search_hwc_knowledge", {"query": "exception"})), 2)
@@ -92,6 +103,17 @@ class ToolTests(unittest.TestCase):
         result = agent.respond("Summarize the current position")
         self.assertEqual(result["object"], "response")
         self.assertFalse(result["approval_required"])
+
+    def test_agent_uses_entity_from_prompt(self):
+        mcp.STATE["HWC-1002"] = {
+            **mcp.STATE["HWC-1001"],
+            "entity_id": "HWC-1002",
+            "name": "HWC-1002",
+        }
+        agent = HostedAgent("http://unused")
+        agent.call = lambda name, args: mcp.call_tool(name, args)
+        result = agent.respond("Summarize HWC-1002")
+        self.assertIn("HWC-1002", result["output_text"])
 
 if __name__ == "__main__":
     unittest.main()

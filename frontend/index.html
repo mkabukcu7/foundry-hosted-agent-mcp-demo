@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HWC Governed Operations</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">H</span>
+      <div>
+        <strong>HWC Governed Operations</strong>
+        <span>Exception briefing workspace</span>
+      </div>
+    </div>
+    <div class="system-status" aria-label="System status">
+      <span class="status-dot"></span>
+      <span>Foundry agent</span>
+      <span class="divider"></span>
+      <span>MCP connected</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="entity-rail">
+      <div class="rail-heading">
+        <span class="eyebrow">Active queue</span>
+        <strong>All exceptions</strong>
+      </div>
+      <div id="entity-list" class="entity-list" aria-live="polite">
+        <div class="entity-loading">Loading governed records...</div>
+      </div>
+      <div class="rail-note">
+        <span class="lock" aria-hidden="true">&#9632;</span>
+        <p><strong>Governed access</strong>Business records are read through the configured Fabric view. Actions remain proposal-only.</p>
+      </div>
+    </aside>
+
+    <section class="briefing" aria-labelledby="briefing-title">
+      <div class="briefing-header">
+        <div>
+          <span id="entity-eyebrow" class="eyebrow">Select an entity</span>
+          <h1 id="briefing-title">Exception briefing</h1>
+        </div>
+        <span id="status-badge" class="status-badge">Loading</span>
+      </div>
+
+      <div id="record-details" class="record-details" aria-label="Current entity data">
+        <div><span>Owner</span><strong id="detail-owner">-</strong></div>
+        <div><span>Severity</span><strong id="detail-severity">-</strong></div>
+        <div><span>Category</span><strong id="detail-category">-</strong></div>
+        <div><span>Primary risk</span><strong id="detail-risk">-</strong></div>
+        <div><span>Due date</span><strong id="detail-due-date">-</strong></div>
+        <div><span>Last reviewed</span><strong id="detail-last-review">-</strong></div>
+        <div class="detail-wide"><span>Source updated</span><strong id="detail-updated">-</strong></div>
+      </div>
+
+      <div id="conversation" class="conversation" aria-live="polite">
+        <div class="welcome">
+          <span class="welcome-index">01</span>
+          <div>
+            <h2>Start with a grounded briefing</h2>
+            <p>Ask the agent to retrieve the current exception, identify the primary risk, and cite its governed sources.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-actions" aria-label="Suggested demo actions">
+        <button type="button" data-prompt="summary">
+          <span>01</span>
+          Summarize current position
+        </button>
+        <button type="button" data-prompt="followup">
+          <span>02</span>
+          Prepare follow-up action
+        </button>
+      </div>
+
+      <form id="prompt-form" class="composer">
+        <label for="prompt">Ask about this entity</label>
+        <div class="composer-row">
+          <textarea id="prompt" rows="2" placeholder="Ask for a grounded exception summary..." required></textarea>
+          <button id="send" type="submit" aria-label="Send question" title="Send question">&#8593;</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="evidence-rail">
+      <div class="evidence-header">
+        <span class="eyebrow">Audit context</span>
+        <strong>Evidence trail</strong>
+      </div>
+
+      <section class="evidence-section">
+        <h2>Tools invoked</h2>
+        <div id="tools" class="empty-evidence">Run the briefing to view MCP activity.</div>
+      </section>
+
+      <section class="evidence-section">
+        <h2>Sources</h2>
+        <div id="sources" class="empty-evidence">Source identifiers appear with grounded answers.</div>
+      </section>
+
+      <section class="approval-panel" id="approval-panel">
+        <div class="approval-title">
+          <span>Approval boundary</span>
+          <strong id="approval-status">Not requested</strong>
+        </div>
+        <p>The agent may prepare a proposed action, but no execution endpoint is available.</p>
+      </section>
+
+      <section class="data-path">
+        <span class="eyebrow">Live path</span>
+        <ol>
+          <li><span>1</span>Foundry agent</li>
+          <li><span>2</span>Managed MCP tools</li>
+          <li><span>3</span>Fabric summary view</li>
+        </ol>
+      </section>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
