@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("mcp_server", ROOT / "mcp-server/server.py")
@@ -47,6 +48,43 @@ class ToolTests(unittest.TestCase):
         action = mcp.call_tool("prepare_follow_up_action", {"entity_id": "HWC-1001", "action_type": "Review", "instructions": "Contact owner"})
         self.assertEqual(action["execution_status"], "PENDING_APPROVAL")
         self.assertIn("approval", action["approval_requirement"].lower())
+
+    def test_fabric_data_source_uses_lakehouse_summary(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "HWC_DATA_SOURCE": "fabric",
+                "FABRIC_WORKSPACE_ID": "workspace-123",
+                "FABRIC_LAKEHOUSE_ID": "lakehouse-123",
+            },
+            clear=False,
+        ):
+            import importlib
+            import shared.data as data
+            importlib.reload(data)
+
+            with patch.object(data, "_query_fabric", return_value=[{ "entity_id": "HWC-1001", "name": "Contoso", "current_status": "Needs attention", "important_metrics": {"open_exceptions": 1, "days_since_review": 12, "service_health": "Green"}, "risks": ["Reconciliation exception is overdue"], "recent_activity": ["Reviewed on 2026-09-02"], "supporting_sources": ["SYN-OPS-001"]}]):
+                records = data.get_business_records()
+
+            self.assertIn("HWC-1001", records)
+            self.assertEqual(records["HWC-1001"]["current_status"], "Needs attention")
+
+    def test_fabric_row_is_normalized_to_agent_contract(self):
+        import shared.data as data
+        with patch.object(data, "_query_fabric", return_value=[{
+            "entity_id": "HWC-1002",
+            "status": "In Review",
+            "owner": "Michael Torres",
+            "primary_risk": "Workflow Exception",
+        }]):
+            mcp.STATE.clear()
+            mcp.STATE.update(data.get_business_records())
+
+        summary = mcp.call_tool("get_business_summary", {"entity_id": "HWC-1002"})
+        self.assertEqual(summary["current_status"], "In Review")
+        self.assertEqual(summary["risks"], ["Workflow Exception"])
+        self.assertEqual(summary["supporting_sources"], ["OneLake:dbo.vw_exception_summary"])
+        mcp.reset_state()
 
     def test_agent_responses_shape(self):
         agent = HostedAgent("http://unused")

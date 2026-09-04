@@ -13,7 +13,7 @@ def ignore_cache(_directory, names):
     return {
         name
         for name in names
-        if name in {"__pycache__", ".venv", "local.settings.json"}
+        if name in {"__pycache__", ".venv", ".venv-wsl", "local.settings.json"}
         or name.endswith((".pyc", ".pyo"))
     }
 

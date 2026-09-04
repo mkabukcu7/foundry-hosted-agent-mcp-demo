@@ -2,7 +2,7 @@
 
 import copy
 
-from shared.data import BUSINESS, KNOWLEDGE
+from shared.data import BUSINESS, KNOWLEDGE, get_business_records
 from shared.validation import optional_positive_int, required_text
 
 TOOLS = [
@@ -10,12 +10,12 @@ TOOLS = [
     {"name": "get_business_summary", "description": "Return a grounded summary for a fictional client or process.", "inputSchema": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}},
     {"name": "prepare_follow_up_action", "description": "Prepare a fictional action; never executes without explicit human approval.", "inputSchema": {"type": "object", "properties": {"entity_id": {"type": "string"}, "action_type": {"type": "string"}, "instructions": {"type": "string"}}, "required": ["entity_id", "action_type", "instructions"]}},
 ]
-STATE = copy.deepcopy(BUSINESS)
+STATE = get_business_records()
 
 
 def reset_state():
     STATE.clear()
-    STATE.update(copy.deepcopy(BUSINESS))
+    STATE.update(get_business_records())
 
 
 def call_tool(name, arguments):
@@ -30,15 +30,15 @@ def call_tool(name, arguments):
     if name == "get_business_summary":
         entity_id = required_text(arguments.get("entity_id"), "entity_id").upper()
         if entity_id not in STATE:
-            raise KeyError(f"No synthetic entity found for {entity_id}")
+            raise KeyError(f"No governed entity found for {entity_id}")
         return copy.deepcopy(STATE[entity_id])
     if name == "prepare_follow_up_action":
         entity_id = required_text(arguments.get("entity_id"), "entity_id").upper()
         action_type = required_text(arguments.get("action_type"), "action_type")
         instructions = required_text(arguments.get("instructions"), "instructions")
         if entity_id not in STATE:
-            raise KeyError(f"No synthetic entity found for {entity_id}")
-        return {"proposed_action": f"{action_type}: {instructions}", "affected_system": "Synthetic HWC case tracker", "risk_level": "medium", "approval_requirement": "Explicit human approval required", "execution_status": "PENDING_APPROVAL", "entity_id": entity_id}
+            raise KeyError(f"No governed entity found for {entity_id}")
+        return {"proposed_action": f"{action_type}: {instructions}", "affected_system": "HWC governed exception tracker", "risk_level": "medium", "approval_requirement": "Explicit human approval required", "execution_status": "PENDING_APPROVAL", "entity_id": entity_id}
     raise KeyError(f"Unknown tool: {name}")
 
 

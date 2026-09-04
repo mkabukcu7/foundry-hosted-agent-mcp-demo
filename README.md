@@ -1,10 +1,11 @@
 # Foundry Hosted Agent + Remote MCP Demo
 
-This sample shows how an enterprise can expose governed knowledge, fictional
+This sample shows how an enterprise can expose governed knowledge, Lakehouse
 business data, and approval-gated capabilities to a Microsoft Foundry Hosted
 Agent through the Azure Functions managed MCP extension. HWC implements tool
 logic while Azure Functions owns the MCP endpoint, discovery, protocol
-lifecycle, hosting, and scaling. Every record is synthetic. Nothing sends
+lifecycle, hosting, and scaling. The business source is the curated
+`vw_exception_summary` view in the `HWC_GovernedData` Lakehouse. Nothing sends
 email, calls a production system, or performs an irreversible action.
 
 ## Architecture
@@ -14,8 +15,8 @@ flowchart LR
   U[User / Responses client] --> A[Foundry Hosted Agent\nMicrosoft Agent Framework]
   A -->|Managed identity + Streamable HTTP| P{Optional API Management}
   P --> M[Azure Functions managed MCP extension]
-  M --> K[(Synthetic knowledge)]
-  M --> B[(Synthetic business records)]
+  M --> K[(Curated guidance)]
+  M --> B[(OneLake Lakehouse view)]
   A --> T[Application Insights / OpenTelemetry]
   M --> T
 ```
@@ -32,8 +33,9 @@ host, `gpt-5-mini`, and Azure Functions managed MCP tool triggers.
 * **Managed remote MCP server** (`mcp-server/`): Azure Functions
   `mcpToolTrigger` functions. The Functions MCP extension owns Streamable HTTP,
   tool discovery, protocol lifecycle, and endpoint scaling.
-* **Synthetic data** (`shared/data.py`): policy, architecture, operations,
-  and HWC-1001 records.
+* **Governed business data** (`shared/data.py`): the MCP business lookup can
+  consume validated rows from the OneLake-backed `vw_exception_summary` view.
+  Synthetic data remains the local fallback when `HWC_DATA_SOURCE=synthetic`.
 * **Observability**: F5 exports agent spans to Foundry Toolkit on port 4317.
   Azure Functions supplies platform logs and Application Insights integration
   for the MCP runtime. The deployed hosted agent disables Agent Framework
@@ -49,17 +51,19 @@ host, `gpt-5-mini`, and Azure Functions managed MCP tool triggers.
 * Azure Developer CLI with the Microsoft Foundry extension
 * Access to a configured Microsoft Foundry project and `gpt-5-mini` deployment
 * Microsoft Entra credentials available through `DefaultAzureCredential`
+* x64 Windows or Linux for the local Azure Functions Python worker
 
 ## Local setup and demo
 
 ```powershell
 Set-Location C:\workspace\hosted-agent-mcp\foundry-hosted-agent-mcp-demo
 Copy-Item agent\.env.example agent\.env
+Copy-Item mcp-server\local.settings.json.example mcp-server\local.settings.json
 agent\.venv\Scripts\python.exe -m pip install -r agent\requirements.txt
 agent\.venv\Scripts\python.exe -m pip install -r mcp-server\requirements.txt
 ```
 
-Confirm the values in `agent/.env`, then press `F5` and select **Debug HWC
+Confirm the values in `agent/.env` and `mcp-server/local.settings.json`, then press `F5` and select **Debug HWC
 Hosted Agent**. VS Code starts the managed Functions MCP endpoint at
 `http://127.0.0.1:8001/runtime/webhooks/mcp`, starts the Responses host on port
 8088, attaches the debugger, and opens Foundry Toolkit Agent
@@ -84,6 +88,36 @@ Flow A discovers tools, reads structured data and knowledge, and returns
 source identifiers. Flow B prepares an action with `PENDING_APPROVAL`; no
 execution endpoint exists until a human approval mechanism is added.
 Reset state by restarting the MCP server.
+
+## OneLake configuration
+
+The governed business source uses these existing Fabric objects:
+
+* Workspace: `WTW Hosted Agent Demo`
+* Workspace ID: `<fabric-workspace-id>`
+* Lakehouse: `HWC_GovernedData`
+* Lakehouse ID: `<fabric-lakehouse-id>`
+* Table: `dbo.exception_tracking`
+* Summary view: `dbo.vw_exception_summary`
+
+Provide the environment-specific coordinates in `.env` and
+`mcp-server/local.settings.json` using the committed examples. Copy the latter
+to `mcp-server/local.settings.json` before starting the Functions host. The
+local file is ignored by Git because it is the place for runtime secrets and
+local overrides.
+
+The identity used to run the host needs access to the Fabric workspace and
+Lakehouse. OneLake DFS access uses a Microsoft Entra token for
+`https://storage.azure.com/`. A quick connectivity check lists the governed
+schema at:
+
+```text
+https://onelake.dfs.fabric.microsoft.com/<workspace-id>/<lakehouse-id>/Tables/dbo
+```
+
+The expected entries are `exception_tracking` and `vw_exception_summary`.
+Read access should use the curated summary view; the action tool remains
+proposal-only and requires explicit human approval.
 
 ## Tests
 
@@ -112,6 +146,15 @@ Cleanup: first list resources with `az resource list --resource-group
 `azd down` only after explicit approval. This repository never deletes Azure
 resources automatically.
 
+### Deployment networking note
+
+The project Storage Account may have `publicNetworkAccess: Disabled` because
+of an effective organization policy. This is an operational deployment note,
+not a limitation of the application. If package upload is unavailable from the
+developer machine, use the approved private build path with access to the
+Storage private endpoint, or the organization-approved policy exception route.
+The Function App's managed identity and data-plane roles remain unchanged.
+
 ## Security model and limitations
 
 Microsoft Entra authentication must be enforced at the deployed Functions
@@ -125,8 +168,36 @@ proposal-only and use synthetic in-memory state.
 * `Connection refused`: run `func start --port 8001` from `mcp-server`.
 * MCP initialization failure: verify Core Tools is 4.0.7030 or later and
   `MCP_SERVER_URL` ends with `/runtime/webhooks/mcp`.
-* `The Azure Functions Python worker does not support windows-arm64`: run the
-  managed MCP host on x64 Windows, WSL/Linux, or a supported container host.
+* `The Azure Functions Python worker does not support windows-arm64`: do not
+  run the Functions host directly on Windows ARM64. Use an x64 Windows/Linux
+  host or a supported x64 container host. On an ARM64 WSL distribution,
+  installing Python 3.13 in a virtualenv is not enough: Core Tools still
+  launches its bundled `linux-arm64` Python worker, which cannot load the
+  MCP-capable Python 3.13 dependencies.
+* `FunctionApp object has no attribute mcp_tool`: install the dependencies
+  from `mcp-server/requirements.txt`. The managed MCP decorators require
+  `azure-functions==2.3.0`, Python 3.13, and the current Azure Functions Core
+  Tools runtime. Keep this version pinned; older 1.x releases do not provide
+  the `mcp_tool` decorator.
+* `Secret initialization from Blob storage failed`: for local development,
+  set `AzureWebJobsSecretStorageType` to `Files` in
+  `mcp-server/local.settings.json`. This avoids requiring Azurite or an Azure
+  Storage connection just to start the local host.
+* `No module named shared` when starting from `mcp-server`: include the repo
+  root on `PYTHONPATH`:
+
+  ```bash
+  cd mcp-server
+  PYTHONPATH=.. func start --port 8001
+  ```
+
+  On a Linux or WSL host, install dependencies once before starting:
+
+  ```bash
+  python3.13 -m venv .venv-wsl
+  .venv-wsl/bin/python -m pip install -r mcp-server/requirements.txt
+  ```
+
 * Remote `401`: verify Easy Auth configuration and the agent managed-identity
   token audience.
 * Stale demo state: restart the MCP server.

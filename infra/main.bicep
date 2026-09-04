@@ -68,6 +68,10 @@ param logAnalyticsName string = ''
 param resourceGroupName string = ''
 param storageAccountName string = ''
 param vNetName string = ''
+param fabricWorkspaceId string = ''
+param fabricLakehouseId string = ''
+param fabricSqlEndpoint string = ''
+param fabricSqlDatabase string = ''
 @description('Id of the user identity to be used for testing and debugging. This is not required in production. Leave empty if not needed.')
 param principalId string = deployer().objectId
 
@@ -136,6 +140,15 @@ module api './app/api.bicep' = {
     identityClientId: apiUserAssignedIdentity.outputs.clientId
     serviceName: 'mcp-server'
     appSettings: {
+      HWC_DATA_SOURCE: 'fabric'
+      FABRIC_WORKSPACE_ID: fabricWorkspaceId
+      FABRIC_LAKEHOUSE_ID: fabricLakehouseId
+      FABRIC_SQL_ENDPOINT: fabricSqlEndpoint
+      FABRIC_SQL_DATABASE: fabricSqlDatabase
+      FABRIC_SCHEMA: 'dbo'
+      FABRIC_TABLE: 'exception_tracking'
+      FABRIC_SUMMARY_VIEW: 'vw_exception_summary'
+      ONELAKE_DFS_ENDPOINT: 'https://onelake.dfs.fabric.microsoft.com'
     }
     virtualNetworkSubnetId: vnetEnabled ? serviceVirtualNetwork.outputs.appSubnetID : ''
     // Authorization parameters
