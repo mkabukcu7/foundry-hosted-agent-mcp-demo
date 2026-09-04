@@ -44,7 +44,9 @@ def _normalise_record(record):
 
     if "supporting_sources" not in record and "source_ids" in record:
         record["supporting_sources"] = record["source_ids"]
-    record.setdefault("supporting_sources", ["OneLake:dbo.vw_exception_summary"])
+    schema = os.getenv("FABRIC_SCHEMA", "dbo")
+    view = os.getenv("FABRIC_SUMMARY_VIEW", "vw_exception_summary")
+    record.setdefault("supporting_sources", [f"OneLake:{schema}.{view}"])
 
     return record
 
@@ -65,14 +67,15 @@ def _query_fabric():
 
     server = os.getenv("FABRIC_SQL_ENDPOINT")
     database = os.getenv("FABRIC_SQL_DATABASE", os.getenv("FABRIC_LAKEHOUSE_NAME", ""))
+    schema = _validate_sql_identifier(os.getenv("FABRIC_SCHEMA", "dbo"), "FABRIC_SCHEMA")
     view = _validate_sql_identifier(os.getenv("FABRIC_SUMMARY_VIEW", "vw_exception_summary"), "FABRIC_SUMMARY_VIEW")
     if not server or not database:
-        raise RuntimeError("FABRIC_SQL_ENDPOINT and FABRIC_SQL_DATABASE are required for Fabric data access.")
+        raise RuntimeError("FABRIC_SQL_ENDPOINT and FABRIC_SQL_DATABASE (or FABRIC_LAKEHOUSE_NAME) are required for Fabric data access.")
 
     credential = DefaultAzureCredential()
     token = credential.get_token("https://database.windows.net/.default").token
-    token_bytes = token.encode("utf-16le")
-    token_struct = struct.pack("<I", len(token_bytes)) + token_bytes
+    token_bytes = token.encode("utf-16-le")
+    token_struct = struct.pack("=I", len(token_bytes)) + token_bytes
 
     import pyodbc
 
@@ -86,7 +89,7 @@ def _query_fabric():
         cursor.execute(
             f"SELECT entity_id, status, owner, due_date, severity, exception_category, "
             f"primary_risk, last_review_date, source_last_updated "
-            f"FROM dbo.[{view}] ORDER BY entity_id"
+            f"FROM [{schema}].[{view}] ORDER BY entity_id"
         )
         columns = [column[0] for column in cursor.description]
         return [_json_value(dict(zip(columns, row))) for row in cursor.fetchall()]
