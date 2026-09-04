@@ -2,9 +2,11 @@
 __pycache__/
 *.py[cod]
 .env
+local.settings.json
 .pytest_cache/
 .coverage
 dist/
 build/
 *.egg-info/
 .azure/
+/demo_requirement.md

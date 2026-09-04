@@ -5,9 +5,17 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-env = {**os.environ, "PYTHONPATH": str(ROOT)}
+env = {
+    **os.environ,
+    "PYTHONPATH": str(ROOT),
+    "languageWorkers__python__defaultExecutablePath": sys.executable,
+}
 processes = [
-    subprocess.Popen([sys.executable, str(ROOT / "mcp-server/server.py")], env=env),
+    subprocess.Popen(
+        ["func", "start", "--port", "8001"],
+        cwd=ROOT / "mcp-server",
+        env=env,
+    ),
     subprocess.Popen([sys.executable, "-m", "agent.server"], env=env),
 ]
 try:

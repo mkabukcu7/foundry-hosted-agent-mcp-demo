@@ -1,65 +1,76 @@
 # Foundry Hosted Agent + Remote MCP Demo
 
-This customer-demo-ready sample shows how an enterprise can expose governed
-knowledge, fictional business data, and safe API capabilities to an AI agent.
-Every record in this repository is synthetic. Nothing sends email, calls a
-production system, or performs an irreversible action.
+This sample shows how an enterprise can expose governed knowledge, fictional
+business data, and approval-gated capabilities to a Microsoft Foundry Hosted
+Agent through the Azure Functions managed MCP extension. HWC implements tool
+logic while Azure Functions owns the MCP endpoint, discovery, protocol
+lifecycle, hosting, and scaling. Every record is synthetic. Nothing sends
+email, calls a production system, or performs an irreversible action.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   U[User / Responses client] --> A[Foundry Hosted Agent\nMicrosoft Agent Framework]
-  A -->|Entra-authenticated MCP| M[Azure Functions remote MCP]
+  A -->|Managed identity + Streamable HTTP| P{Optional API Management}
+  P --> M[Azure Functions managed MCP extension]
   M --> K[(Synthetic knowledge)]
   M --> B[(Synthetic business records)]
   A --> T[Application Insights / OpenTelemetry]
   M --> T
 ```
 
-The `agent` package is a dependency-free local Responses-protocol harness.
-In Azure, its tool-discovery and tool-call boundary maps directly to the
-Microsoft Agent Framework hosted-agent pattern. The `mcp-server` package
-provides streamable-HTTP-shaped JSON-RPC endpoints suitable for a Functions
-HTTP trigger.
+The production-shaped path uses Microsoft Agent Framework, the Responses 2.0
+host, `gpt-5-mini`, and Azure Functions managed MCP tool triggers.
 
 ## Components
 
-* **Hosted agent** (`agent/`): multi-turn-capable Responses endpoint, tool
-  discovery, grounded sources, and approval-aware responses.
-* **Remote MCP server** (`mcp-server/`): `tools/list`, `tools/call`, health
-  check, input validation, correlation IDs, and optional bearer-token
-  enforcement for local testing.
+* **Hosted agent** (`agent/main.py`): Microsoft Agent Framework agent exposed
+  through the Responses 2.0 protocol.
+* **Local test double** (`agent/agent.py`, `agent/server.py`): fast scripted
+  behavior for deterministic tests; it is not the deployed agent.
+* **Managed remote MCP server** (`mcp-server/`): Azure Functions
+  `mcpToolTrigger` functions. The Functions MCP extension owns Streamable HTTP,
+  tool discovery, protocol lifecycle, and endpoint scaling.
 * **Synthetic data** (`shared/data.py`): policy, architecture, operations,
   and HWC-1001 records.
-* **Observability**: set `APPLICATIONINSIGHTS_CONNECTION_STRING` when wiring
-  the hosted deployment to OpenTelemetry/Application Insights. Correlation
-  IDs are returned by MCP responses.
+* **Observability**: F5 exports agent spans to Foundry Toolkit on port 4317.
+  Azure Functions supplies platform logs and Application Insights integration
+  for the MCP runtime. The deployed hosted agent disables Agent Framework
+  instrumentation so prompts, completions, tool arguments, and tool results are
+  not written to session logs; HTTP status and Function platform telemetry remain
+  available. No telemetry resource is provisioned by this repository's local
+  workflow.
 
 ## Prerequisites
 
-* Python 3.10+
-* Azure Developer CLI (`azd`) for Azure deployment
-* An Azure subscription and Microsoft Entra permissions (deployment is not
-  performed by this sample)
+* Python 3.13
+* Azure Functions Core Tools 4.0.7030 or later
+* Azure Developer CLI with the Microsoft Foundry extension
+* Access to a configured Microsoft Foundry project and `gpt-5-mini` deployment
+* Microsoft Entra credentials available through `DefaultAzureCredential`
 
 ## Local setup and demo
 
-```bash
-cd /home/runner/work/foundry-hosted-agent-mcp-demo/foundry-hosted-agent-mcp-demo
-python -m venv .venv && . .venv/bin/activate
-cp .env.example .env
-python scripts/start_local.py
+```powershell
+Set-Location C:\workspace\hosted-agent-mcp\foundry-hosted-agent-mcp-demo
+Copy-Item agent\.env.example agent\.env
+agent\.venv\Scripts\python.exe -m pip install -r agent\requirements.txt
+agent\.venv\Scripts\python.exe -m pip install -r mcp-server\requirements.txt
 ```
 
-In another terminal:
+Confirm the values in `agent/.env`, then press `F5` and select **Debug HWC
+Hosted Agent**. VS Code starts the managed Functions MCP endpoint at
+`http://127.0.0.1:8001/runtime/webhooks/mcp`, starts the Responses host on port
+8088, attaches the debugger, and opens Foundry Toolkit Agent
+Inspector and Trace Viewer. Use the first demo prompt, then select the agent
+and MCP spans in Trace Viewer to show model, tool, latency, and correlation
+metadata without exposing prompt or completion content.
 
-```bash
-curl http://127.0.0.1:8001/healthz
-curl -X POST http://127.0.0.1:8001/mcp -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-curl -X POST http://127.0.0.1:8000/v1/responses -H 'Content-Type: application/json' \
-  -d '{"input":"Summarize the current position for fictional client HWC-1001. Identify the primary exception and show your sources."}'
+For the scripted test-double harness instead:
+
+```powershell
+agent\.venv\Scripts\python.exe scripts\start_local.py
 ```
 
 Exact demo prompts:
@@ -72,36 +83,29 @@ Exact demo prompts:
 Flow A discovers tools, reads structured data and knowledge, and returns
 source identifiers. Flow B prepares an action with `PENDING_APPROVAL`; no
 execution endpoint exists until a human approval mechanism is added.
-Reset state with `python scripts/reset_demo.py` (or restart the local server).
+Reset state by restarting the MCP server.
 
 ## Tests
 
-```bash
-python -m unittest discover -s tests -v
-# Optional: python -m pytest
+```powershell
+agent\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Tests cover discovery, validation, empty results, missing entities,
-approval-required behavior, agent integration, and health/error boundaries.
+Tests cover managed MCP trigger registration, validation, empty results,
+missing entities, approval behavior, and deterministic demo
+evaluations. See [evaluation.md](evaluation.md),
+[docs/architecture.md](docs/architecture.md), and [docs/poc-plan.md](docs/poc-plan.md).
 
 ## Azure deployment (approval required)
 
-Do not run deployment without reviewing the generated plan and approving the
-resources. After configuring Entra identities and Foundry project settings:
-
-```bash
-azd auth login
-azd init
-azd provision       # review and approve the plan
-azd deploy
-```
-
-Expected resources are an Azure Functions app (and its storage account),
-Application Insights/Log Analytics, a Foundry project/hosted-agent resource,
-and the required managed identity role assignments. Exact resource names and
-SKU/cost depend on the subscription and `azd` environment. Configure Entra
-authentication at the Functions ingress and use managed identity from the
-agent; no credentials belong in source or `.env`.
+Deployment is not part of local setup. Before any deployment, complete the
+resource, identity, networking, observability, SKU, and cost sections in
+`.azure/deployment-plan.md`; run Azure validation; review the resulting plan;
+and obtain explicit approval. The managed MCP endpoint must be deployed and its
+URL configured before deploying the hosted agent because a hosted agent cannot
+reach `127.0.0.1`. The deployed path is `/runtime/webhooks/mcp`. The MCP
+service's `prepackage` hook stages both the Function source and shared synthetic
+data under `.azure/mcp-server`.
 
 Cleanup: first list resources with `az resource list --resource-group
 <resource-group> -o table`, confirm the list with the owner, then run
@@ -110,22 +114,19 @@ resources automatically.
 
 ## Security model and limitations
 
-Entra authentication should be enforced at the deployed ingress; locally,
-set `MCP_AUTH_TOKEN` to require an `Authorization` header containing that
-configured token. Errors return
-safe messages and correlation IDs rather than credentials. Actions are
-explicitly approval-gated and use synthetic in-memory state. The local
-server is intentionally minimal and is not a production MCP gateway:
-configure the official Azure Functions MCP/streamable HTTP adapter, network
-restrictions, RBAC, secretless managed identity, and production telemetry
-before deployment. The sample does not include a real LLM key or customer
-data.
+Microsoft Entra authentication must be enforced at the deployed Functions
+ingress, with managed identity and least-privilege RBAC used between services.
+The MCP extension webhook is anonymous because platform Easy Auth owns that
+boundary; do not deploy it publicly without Easy Auth. Actions remain
+proposal-only and use synthetic in-memory state.
 
 ## Troubleshooting
 
-* `Connection refused`: start `python scripts/start_local.py` and check both
-  `/healthz` endpoints.
-* `502` from the agent: ensure `MCP_SERVER_URL` points to port 8001.
-* `401`: when `MCP_AUTH_TOKEN` is set, send an `Authorization` header with the
-  configured token.
-* Stale demo state: run `python scripts/reset_demo.py` or restart services.
+* `Connection refused`: run `func start --port 8001` from `mcp-server`.
+* MCP initialization failure: verify Core Tools is 4.0.7030 or later and
+  `MCP_SERVER_URL` ends with `/runtime/webhooks/mcp`.
+* `The Azure Functions Python worker does not support windows-arm64`: run the
+  managed MCP host on x64 Windows, WSL/Linux, or a supported container host.
+* Remote `401`: verify Easy Auth configuration and the agent managed-identity
+  token audience.
+* Stale demo state: restart the MCP server.

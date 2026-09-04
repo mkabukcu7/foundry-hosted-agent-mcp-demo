@@ -1,0 +1,119 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Validate prerequisites",
+      "type": "aitk",
+      "command": "debug-check-prerequisites",
+      "args": {
+        "portOccupancy": [5679, 8001, 8088]
+      }
+    },
+    {
+      "label": "Open Trace Viewer",
+      "type": "shell",
+      "command": "echo '${input:openTraceViewer}'",
+      "presentation": {
+        "reveal": "never"
+      },
+      "dependsOn": ["Validate prerequisites"]
+    },
+    {
+      "label": "Run MCP Server",
+      "type": "shell",
+      "command": "func start --port 8001",
+      "isBackground": true,
+      "options": {
+        "cwd": "${workspaceFolder}/mcp-server",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}",
+          "languageWorkers__python__defaultExecutablePath": "${workspaceFolder}\\agent\\.venv\\Scripts\\python.exe"
+        }
+      },
+      "dependsOn": ["Open Trace Viewer"],
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "^.*$",
+            "file": 0,
+            "location": 1,
+            "message": 2
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Worker process started and initialized|For detailed output"
+        }
+      }
+    },
+    {
+      "label": "Run Agent HTTP Server",
+      "type": "shell",
+      "command": "${workspaceFolder}\\agent\\.venv\\Scripts\\python.exe -m debugpy --listen 127.0.0.1:5679 main.py",
+      "isBackground": true,
+      "options": {
+        "cwd": "${workspaceFolder}/agent",
+        "env": {
+          "MCP_SERVER_URL": "http://127.0.0.1:8001/runtime/webhooks/mcp",
+          "FOUNDRY_TOOLKIT_OTLP_PORT": "4317",
+          "ENABLE_SENSITIVE_TELEMETRY": "false"
+        }
+      },
+      "dependsOn": ["Run MCP Server"],
+      "dependsOrder": "sequence",
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": "^.*$",
+            "file": 0,
+            "location": 1,
+            "message": 2
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Application startup complete|[Rr]unning on|Started server process"
+        }
+      }
+    },
+    {
+      "label": "Open Agent Inspector",
+      "type": "shell",
+      "command": "echo '${input:openAgentInspector}'",
+      "presentation": {
+        "reveal": "never"
+      },
+      "dependsOn": ["Run Agent HTTP Server"]
+    },
+    {
+      "label": "Terminate All Tasks",
+      "command": "echo ${input:terminate}",
+      "type": "shell",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "openTraceViewer",
+      "type": "command",
+      "command": "ai-mlstudio.tracing.open"
+    },
+    {
+      "id": "openAgentInspector",
+      "type": "command",
+      "command": "ai-mlstudio.openTestTool",
+      "args": {
+        "triggeredFrom": "tasks",
+        "port": 8088
+      }
+    },
+    {
+      "id": "terminate",
+      "type": "command",
+      "command": "workbench.action.tasks.terminate",
+      "args": "terminateAll"
+    }
+  ]
+}

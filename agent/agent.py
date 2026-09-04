@@ -5,14 +5,17 @@ import urllib.request
 
 class HostedAgent:
     def __init__(self, mcp_url=None):
-        self.mcp_url = (mcp_url or os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8001")).rstrip("/")
+        self.mcp_url = mcp_url or os.getenv(
+            "MCP_SERVER_URL",
+            "http://127.0.0.1:8001/runtime/webhooks/mcp",
+        )
 
     def _rpc(self, method, params=None):
         headers = {"Content-Type": "application/json"}
         token = os.getenv("MCP_AUTH_TOKEN")
         if token:
             headers["Authorization"] = "Bearer " + token
-        request = urllib.request.Request(self.mcp_url + "/mcp", data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}).encode(), headers=headers)
+        request = urllib.request.Request(self.mcp_url, data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}).encode(), headers=headers)
         with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read())
         if "error" in payload:
