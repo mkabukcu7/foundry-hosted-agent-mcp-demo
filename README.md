@@ -4,8 +4,8 @@ This sample shows how an enterprise can expose governed knowledge, Lakehouse
 business data, and approval-gated capabilities to a Microsoft Foundry Hosted
 Agent through the Azure Functions managed MCP extension. HWC implements tool
 logic while Azure Functions owns the MCP endpoint, discovery, protocol
-lifecycle, hosting, and scaling. The business source is the curated
-`vw_exception_summary` view in the `HWC_GovernedData` Lakehouse. Nothing sends
+lifecycle, hosting, and scaling. The business source is a curated summary view
+in the configured enterprise Lakehouse. Nothing sends
 email, calls a production system, or performs an irreversible action.
 
 ## Architecture
@@ -34,7 +34,7 @@ host, `gpt-5-mini`, and Azure Functions managed MCP tool triggers.
   `mcpToolTrigger` functions. The Functions MCP extension owns Streamable HTTP,
   tool discovery, protocol lifecycle, and endpoint scaling.
 * **Governed business data** (`shared/data.py`): the MCP business lookup can
-  consume validated rows from the OneLake-backed `vw_exception_summary` view.
+  consume validated rows from the configured OneLake-backed summary view.
   Synthetic data remains the local fallback when `HWC_DATA_SOURCE=synthetic`.
 * **Observability**: F5 exports agent spans to Foundry Toolkit on port 4317.
   Azure Functions supplies platform logs and Application Insights integration
@@ -79,9 +79,9 @@ agent\.venv\Scripts\python.exe scripts\start_local.py
 
 Exact demo prompts:
 
-1. “Summarize the current position for fictional client HWC-1001. Identify the
+1. “Summarize the current position for the demo entity CASE-1001. Identify the
    primary exception and show your sources.”
-2. “Prepare a follow-up action for HWC-1001 addressing the primary exception.
+2. “Prepare a follow-up action for the demo entity CASE-1001 addressing the primary exception.
    Do not execute it without approval.”
 
 Flow A discovers tools, reads structured data and knowledge, and returns
@@ -91,14 +91,14 @@ Reset state by restarting the MCP server.
 
 ## OneLake configuration
 
-The governed business source uses these existing Fabric objects:
+The governed business source uses these configured Fabric objects:
 
-* Workspace: `WTW Hosted Agent Demo`
+* Workspace: `<fabric-workspace-name>`
 * Workspace ID: `<fabric-workspace-id>`
-* Lakehouse: `HWC_GovernedData`
+* Lakehouse: `<fabric-lakehouse-name>`
 * Lakehouse ID: `<fabric-lakehouse-id>`
-* Table: `dbo.exception_tracking`
-* Summary view: `dbo.vw_exception_summary`
+* Table: `dbo.<source-table-name>`
+* Summary view: `dbo.<summary-view-name>`
 
 Provide the environment-specific coordinates in `.env` and
 `mcp-server/local.settings.json` using the committed examples. Copy the latter
@@ -115,7 +115,7 @@ schema at:
 https://onelake.dfs.fabric.microsoft.com/<workspace-id>/<lakehouse-id>/Tables/dbo
 ```
 
-The expected entries are `exception_tracking` and `vw_exception_summary`.
+The expected entries are the configured source table and summary view.
 Read access should use the curated summary view; the action tool remains
 proposal-only and requires explicit human approval.
 
