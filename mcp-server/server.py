@@ -7,6 +7,7 @@ from shared.validation import optional_positive_int, required_text
 
 TOOLS = [
     {"name": "search_hwc_knowledge", "description": "Search synthetic governed policy, architecture, and operations documents.", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}, "category": {"type": "string"}, "maximum_results": {"type": "integer", "minimum": 1}}, "required": ["query"]}},
+    {"name": "list_business_summaries", "description": "List all governed HWC client or process summaries.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "get_business_summary", "description": "Return a grounded summary for a fictional client or process.", "inputSchema": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}},
     {"name": "prepare_follow_up_action", "description": "Prepare a fictional action; never executes without explicit human approval.", "inputSchema": {"type": "object", "properties": {"entity_id": {"type": "string"}, "action_type": {"type": "string"}, "instructions": {"type": "string"}}, "required": ["entity_id", "action_type", "instructions"]}},
 ]
@@ -32,6 +33,9 @@ def call_tool(name, arguments):
             category = required_text(category, "category").lower()
         limit = optional_positive_int(arguments.get("maximum_results"), "maximum_results", 5)
         return [item for item in KNOWLEDGE if (not category or item["category"] == category) and query in (item["title"] + " " + item["summary"]).lower()][:limit]
+    if name == "list_business_summaries":
+        _ensure_state()
+        return [copy.deepcopy(STATE[key]) for key in sorted(STATE)]
     if name == "get_business_summary":
         _ensure_state()
         entity_id = required_text(arguments.get("entity_id"), "entity_id").upper()
