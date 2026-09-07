@@ -40,7 +40,7 @@ class HostedAgent:
                     item.text for item in result.content if hasattr(item, "text")
                 )
                 raise RuntimeError(details or "MCP tool call failed")
-            text = result.content[0].text
+            text = next(item.text for item in result.content if hasattr(item, "text"))
             try:
                 return json.loads(text)
             except json.JSONDecodeError:
@@ -55,12 +55,18 @@ class HostedAgent:
         if "follow-up" in prompt.lower() or "follow up" in prompt.lower():
             summary = self.call("get_business_summary", {"entity_id": entity_id})
             action = self.call("prepare_follow_up_action", {"entity_id": entity_id, "action_type": "Review exception", "instructions": "Coordinate an owner review of the primary exception."})
-            text = f"Prepared (not executed) action for {entity_id}. Primary risk: {summary['risks'][0]}. Status: {action['execution_status']}. {action['approval_requirement']}."
+            primary_risk = summary["risks"][0] if summary["risks"] else "No primary exception recorded"
+            text = f"Prepared (not executed) action for {entity_id}. Primary risk: {primary_risk}. Status: {action['execution_status']}. {action['approval_requirement']}."
             return {"object": "response", "output_text": text, "tools_used": ["get_business_summary", "prepare_follow_up_action"], "approval_required": True, "source_ids": summary["supporting_sources"]}
         summary = self.call("get_business_summary", {"entity_id": entity_id})
         sources = self.call("search_hwc_knowledge", {"query": "exception", "maximum_results": 3})
-        text = f"{summary['name']} is {summary['current_status']}. Primary exception: {summary['risks'][0]}. Sources: {', '.join(summary['supporting_sources'])}."
-        return {"object": "response", "output_text": text, "tools_used": ["get_business_summary", "search_hwc_knowledge"], "approval_required": False, "source_ids": [item["source_id"] for item in sources]}
+        primary_risk = summary["risks"][0] if summary["risks"] else "No primary exception recorded"
+        source_ids = list(dict.fromkeys(
+            summary["supporting_sources"]
+            + [item["source_id"] for item in sources]
+        ))
+        text = f"{summary['name']} is {summary['current_status']}. Primary exception: {primary_risk}. Sources: {', '.join(summary['supporting_sources'])}."
+        return {"object": "response", "output_text": text, "tools_used": ["get_business_summary", "search_hwc_knowledge"], "approval_required": False, "source_ids": source_ids}
 
 if __name__ == "__main__":
     import sys

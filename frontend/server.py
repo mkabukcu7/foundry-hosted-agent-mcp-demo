@@ -19,7 +19,11 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/health":
-            self._json_response(200, {"status": "ready", "mcp": "connected"})
+            try:
+                HostedAgent().discover_tools()
+                self._json_response(200, {"status": "ready", "mcp": "connected"})
+            except Exception as error:
+                self._json_response(503, {"status": "unavailable", "mcp": "disconnected", "error": str(error)})
             return
         if self.path == "/api/entities":
             try:

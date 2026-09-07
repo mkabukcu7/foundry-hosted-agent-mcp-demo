@@ -7,7 +7,10 @@ const sources = document.querySelector("#sources");
 const approvalPanel = document.querySelector("#approval-panel");
 const approvalStatus = document.querySelector("#approval-status");
 const entityList = document.querySelector("#entity-list");
+const statusDot = document.querySelector("#status-dot");
+const systemStatusMessage = document.querySelector("#system-status-message");
 let selectedEntity = null;
+let requestInFlight = false;
 
 function promptFor(type) {
   const entityId = selectedEntity?.entity_id || "HWC-1001";
@@ -37,11 +40,21 @@ function selectEntity(entity) {
   document.querySelector("#detail-updated").textContent = formatDate(entity.source_last_updated, true);
   document.querySelectorAll(".entity").forEach(button => {
     button.classList.toggle("active", button.dataset.entityId === entity.entity_id);
+    button.setAttribute("aria-pressed", button.dataset.entityId === entity.entity_id);
   });
+}
+
+function setSystemStatus(connected, message) {
+  systemStatusMessage.textContent = message;
+  statusDot.classList.toggle("error", !connected);
 }
 
 async function loadEntities() {
   try {
+    const healthResponse = await fetch("/api/health");
+    const health = await healthResponse.json();
+    if (!healthResponse.ok) throw new Error(health.error || "MCP is unavailable.");
+    setSystemStatus(true, "MCP connected");
     const response = await fetch("/api/entities");
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Unable to load entities.");
@@ -60,6 +73,7 @@ async function loadEntities() {
     }
     if (result.entities.length) selectEntity(result.entities[0]);
   } catch (error) {
+    setSystemStatus(false, "MCP unavailable");
     entityList.innerHTML = `<div class="entity-loading error-text"></div>`;
     entityList.firstElementChild.textContent = error.message;
   }
@@ -92,6 +106,8 @@ function renderEvidence(container, items) {
 }
 
 async function submitPrompt(prompt) {
+  if (requestInFlight) return;
+  requestInFlight = true;
   addMessage("user", prompt);
   input.value = "";
   sendButton.disabled = true;
@@ -120,6 +136,7 @@ async function submitPrompt(prompt) {
     loading.remove();
     addMessage("agent", error.message, true);
   } finally {
+    requestInFlight = false;
     sendButton.disabled = false;
     input.focus();
   }
@@ -128,7 +145,11 @@ async function submitPrompt(prompt) {
 form.addEventListener("submit", event => {
   event.preventDefault();
   const prompt = input.value.trim();
-  if (prompt) submitPrompt(prompt);
+  if (prompt) {
+    const entityId = selectedEntity?.entity_id;
+    const explicitEntity = /\bHWC-\d+\b/i.test(prompt);
+    submitPrompt(!explicitEntity && entityId ? `${prompt} for ${entityId}` : prompt);
+  }
 });
 
 input.addEventListener("keydown", event => {
