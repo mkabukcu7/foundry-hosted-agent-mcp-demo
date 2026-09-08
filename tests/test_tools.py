@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,13 @@ finally:
 from agent.agent import HostedAgent
 
 class ToolTests(unittest.TestCase):
+    def setUp(self):
+        environment = patch.dict("os.environ", {"HWC_DATA_SOURCE": "synthetic"})
+        environment.start()
+        self.addCleanup(environment.stop)
+        mcp.STATE.clear()
+        mcp.STATE.update(mcp.get_business_records.__globals__["BUSINESS"])
+
     def test_functions_register_managed_mcp_triggers(self):
         functions = function_app.app.get_functions()
         self.assertEqual(
@@ -34,7 +42,16 @@ class ToolTests(unittest.TestCase):
         )
 
     def test_discovery_has_all_tools(self):
-        self.assertEqual({tool["name"] for tool in mcp.TOOLS}, {"search_hwc_knowledge", "get_business_summary", "prepare_follow_up_action"})
+        self.assertEqual({tool["name"] for tool in mcp.TOOLS}, {"search_hwc_knowledge", "list_business_summaries", "get_business_summary", "prepare_follow_up_action"})
+
+    def test_lists_all_business_summaries(self):
+        mcp.STATE["HWC-1002"] = {
+            **mcp.STATE["HWC-1001"],
+            "entity_id": "HWC-1002",
+            "name": "Fabrikam",
+        }
+        summaries = mcp.call_tool("list_business_summaries", {})
+        self.assertEqual([item["entity_id"] for item in summaries], ["HWC-1001", "HWC-1002"])
 
     def test_search_and_empty_results(self):
         self.assertEqual(len(mcp.call_tool("search_hwc_knowledge", {"query": "exception"})), 2)
@@ -92,6 +109,88 @@ class ToolTests(unittest.TestCase):
         result = agent.respond("Summarize the current position")
         self.assertEqual(result["object"], "response")
         self.assertFalse(result["approval_required"])
+
+    def test_agent_uses_entity_from_prompt(self):
+        mcp.STATE["HWC-1002"] = {
+            **mcp.STATE["HWC-1001"],
+            "entity_id": "HWC-1002",
+            "name": "HWC-1002",
+        }
+        agent = HostedAgent("http://unused")
+        agent.call = lambda name, args: mcp.call_tool(name, args)
+        result = agent.respond("Summarize HWC-1002")
+        self.assertIn("HWC-1002", result["output_text"])
+
+    def test_agent_uses_mcp_session_for_discovery_and_calls(self):
+        class ContextManager:
+            def __init__(self, value):
+                self.value = value
+
+            async def __aenter__(self):
+                return self.value
+
+            async def __aexit__(self, *args):
+                return False
+
+        tool = SimpleNamespace(model_dump=lambda by_alias: {"name": "get_business_summary"})
+        session = SimpleNamespace(
+            initialize=lambda: ToolTests._async_result(None),
+            list_tools=lambda: ToolTests._async_result(SimpleNamespace(tools=[tool])),
+            call_tool=lambda name, arguments: ToolTests._async_result(
+                SimpleNamespace(isError=False, content=[SimpleNamespace(text='{"entity_id": "HWC-1001"}')])
+            ),
+        )
+        with patch.dict("os.environ", {"MCP_AUTH_TOKEN": "test-token"}), \
+             patch("agent.agent.streamablehttp_client", return_value=ContextManager(("read", "write"))) as client, \
+             patch("agent.agent.ClientSession", return_value=ContextManager(session)):
+            agent = HostedAgent("https://mcp.example")
+            self.assertEqual(agent.discover_tools(), [{"name": "get_business_summary"}])
+            self.assertEqual(agent.call("get_business_summary", {"entity_id": "HWC-1001"})["entity_id"], "HWC-1001")
+        self.assertEqual(client.call_args.args[0], "https://mcp.example")
+        self.assertEqual(client.call_args.kwargs["headers"]["Authorization"], "Bearer " + "test-" + "token")
+
+    def test_agent_surfaces_mcp_errors(self):
+        class ContextManager:
+            def __init__(self, value):
+                self.value = value
+
+            async def __aenter__(self):
+                return self.value
+
+            async def __aexit__(self, *args):
+                return False
+
+        session = SimpleNamespace(
+            initialize=lambda: ToolTests._async_result(None),
+            call_tool=lambda name, arguments: ToolTests._async_result(
+                SimpleNamespace(isError=True, content=[SimpleNamespace(text="denied")])
+            ),
+        )
+        with patch("agent.agent.streamablehttp_client", return_value=ContextManager(("read", "write"))), \
+             patch("agent.agent.ClientSession", return_value=ContextManager(session)):
+            with self.assertRaisesRegex(RuntimeError, "denied"):
+                HostedAgent("https://mcp.example").call("get_business_summary", {})
+
+    def test_agent_handles_summary_without_risks(self):
+        agent = HostedAgent("http://unused")
+
+        def call(name, arguments):
+            if name == "get_business_summary":
+                return {
+                    "name": "Contoso",
+                    "current_status": "Stable",
+                    "risks": [],
+                    "supporting_sources": ["OneLake:summary"],
+                }
+            return []
+
+        agent.call = call
+        result = agent.respond("Prepare a follow-up action for HWC-1001")
+        self.assertIn("No primary exception recorded", result["output_text"])
+
+    @staticmethod
+    async def _async_result(value):
+        return value
 
 if __name__ == "__main__":
     unittest.main()

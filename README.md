@@ -89,6 +89,21 @@ source identifiers. Flow B prepares an action with `PENDING_APPROVAL`; no
 execution endpoint exists until a human approval mechanism is added.
 Reset state by restarting the MCP server.
 
+### Demo frontend
+
+With the MCP server running on port 8001, start the customer-facing demo UI
+from the repository root:
+
+```powershell
+$env:MCP_SERVER_URL = "http://127.0.0.1:8001/runtime/webhooks/mcp"
+agent\.venv\Scripts\python.exe frontend\server.py
+```
+
+Open `http://127.0.0.1:5173`. The UI presents the exception briefing, source
+identifiers, invoked MCP tools, and the proposal-only approval boundary. It
+uses the deterministic Responses test double for presentation while all
+business and knowledge retrieval still runs through the managed MCP endpoint.
+
 ## OneLake configuration
 
 The governed business source uses these configured Fabric objects:
