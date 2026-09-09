@@ -41,9 +41,14 @@ def search_hwc_knowledge(
 
 
 @app.mcp_tool()
-def list_business_summaries() -> list[dict]:
+@app.mcp_tool_property(
+    arg_name="refresh",
+    description="Reload records from the configured Fabric source before listing them.",
+    is_required=False,
+)
+def list_business_summaries(refresh: bool = False) -> list[dict]:
     """List all governed HWC client or process summaries."""
-    return call_tool("list_business_summaries", {})
+    return call_tool("list_business_summaries", {"refresh": refresh})
 
 
 @app.mcp_tool()

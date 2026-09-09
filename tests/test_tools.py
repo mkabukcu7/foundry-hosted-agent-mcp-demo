@@ -53,6 +53,14 @@ class ToolTests(unittest.TestCase):
         summaries = mcp.call_tool("list_business_summaries", {})
         self.assertEqual([item["entity_id"] for item in summaries], ["HWC-1001", "HWC-1002"])
 
+    def test_refreshes_business_summaries_from_source(self):
+        refreshed = {
+            "HWC-1002": {**mcp.STATE["HWC-1001"], "entity_id": "HWC-1002"},
+        }
+        with patch.object(mcp, "get_business_records", return_value=refreshed):
+            summaries = mcp.call_tool("list_business_summaries", {"refresh": True})
+        self.assertEqual([item["entity_id"] for item in summaries], ["HWC-1002"])
+
     def test_search_and_empty_results(self):
         self.assertEqual(len(mcp.call_tool("search_hwc_knowledge", {"query": "exception"})), 2)
         self.assertEqual(mcp.call_tool("search_hwc_knowledge", {"query": "nothing fictional"}), [])
@@ -88,7 +96,7 @@ class ToolTests(unittest.TestCase):
 
     def test_fabric_row_is_normalized_to_agent_contract(self):
         import shared.data as data
-        with patch.object(data, "_query_fabric", return_value=[{
+        with patch.dict("os.environ", {"FABRIC_SUMMARY_VIEW": "vw_exception_summary"}), patch.object(data, "_query_fabric", return_value=[{
             "entity_id": "HWC-1002",
             "status": "In Review",
             "owner": "Michael Torres",

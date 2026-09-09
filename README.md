@@ -36,6 +36,9 @@ host, `gpt-5-mini`, and Azure Functions managed MCP tool triggers.
 * **Governed business data** (`shared/data.py`): the MCP business lookup can
   consume validated rows from the configured OneLake-backed summary view.
   Synthetic data remains the local fallback when `HWC_DATA_SOURCE=synthetic`.
+* **Governed approvals** (`fabric/approval_notebook.py`): a parameterized
+  Fabric notebook validates explicit decisions and appends them to the
+  `action_approvals` Delta table with approver and UTC audit fields.
 * **Observability**: F5 exports agent spans to Foundry Toolkit on port 4317.
   Azure Functions supplies platform logs and Application Insights integration
   for the MCP runtime. The deployed hosted agent disables Agent Framework
@@ -51,7 +54,9 @@ host, `gpt-5-mini`, and Azure Functions managed MCP tool triggers.
 * Azure Developer CLI with the Microsoft Foundry extension
 * Access to a configured Microsoft Foundry project and `gpt-5-mini` deployment
 * Microsoft Entra credentials available through `DefaultAzureCredential`
-* x64 Windows or Linux for the local Azure Functions Python worker
+* Microsoft ODBC Driver 18 for SQL Server when `HWC_DATA_SOURCE=fabric`
+* x64 Windows or Linux when running the local Azure Functions Python worker;
+  ARM64 hosts use the native MCP compatibility server described below
 
 ## Local setup and demo
 
@@ -77,17 +82,66 @@ For the scripted test-double harness instead:
 agent\.venv\Scripts\python.exe scripts\start_local.py
 ```
 
-Exact demo prompts:
+### ARM64 and Docker handoff
 
-1. “Summarize the current position for the demo entity HWC-1001. Identify the
-   primary exception and show your sources.”
-2. “Prepare a follow-up action for the demo entity HWC-1001 addressing the primary exception.
-   Do not execute it without approval.”
+The current ARM64 Windows/WSL development path does **not** use Docker. The
+Azure Functions MCP runtime image and its Python worker are x64. Running that
+image on ARM64 through Docker's amd64/QEMU emulation caused the Python worker
+to exit and left the MCP endpoint returning HTTP 503.
 
-Flow A discovers tools, reads structured data and knowledge, and returns
-source identifiers. Flow B prepares an action with `PENDING_APPROVAL`; no
-execution endpoint exists until a human approval mechanism is added.
-Reset state by restarting the MCP server.
+Use the native FastMCP compatibility server on ARM64. It exposes the same four
+tools at the same Streamable HTTP URL and delegates to the same business logic
+as the Azure Functions implementation. Azure Functions remains the production
+deployment transport. Docker remains suitable on an x64 development host or
+as part of an approved x64 deployment workflow.
+
+From PowerShell on the ARM64 Windows host:
+
+```powershell
+$env:USE_LOCAL_MCP = "1"
+agent\.venv\Scripts\python.exe scripts\start_local.py
+```
+
+The equivalent commands from WSL are:
+
+```bash
+export USE_LOCAL_MCP=1
+./agent/.venv-wsl/bin/python scripts/start_local.py
+```
+
+The launcher loads the repository root `.env`. Keep `HWC_DATA_SOURCE=fabric`
+and the Fabric SQL endpoint, database, schema, and summary-view coordinates in
+that file to use the governed OneLake data. Set `HWC_DATA_SOURCE=synthetic`
+only when an offline fallback is intentionally required.
+
+On Windows, install the Fabric SQL driver from an elevated terminal if it is
+not already available:
+
+```powershell
+winget install --id Microsoft.msodbcsql.18 --exact
+```
+
+### Demo script
+
+Start with this briefing prompt:
+
+> Summarize the current position for the demo entity HWC-1001. Identify the
+> primary exception and show your sources.
+
+Expected result: the agent calls `get_business_summary` and
+`search_hwc_knowledge`, identifies the overdue reconciliation exception, and
+returns source IDs `SYN-OPS-001` and `SYN-POL-001`.
+
+Then use this proposal prompt:
+
+> Prepare a follow-up action for the demo entity HWC-1001 addressing the
+> primary exception. Do not execute it without approval.
+
+Expected result: the agent calls `get_business_summary` and
+`prepare_follow_up_action`, returns `PENDING_APPROVAL`, and reports that
+explicit human approval is required. Enter the approver identity in the UI and
+use **Approve** or **Reject** to record the decision through the Fabric
+notebook. No generic field-update endpoint is exposed.
 
 ### Demo frontend
 
@@ -102,7 +156,13 @@ agent\.venv\Scripts\python.exe frontend\server.py
 Open `http://127.0.0.1:5173`. The UI presents the exception briefing, source
 identifiers, invoked MCP tools, and the proposal-only approval boundary. It
 uses the deterministic Responses test double for presentation while all
-business and knowledge retrieval still runs through the managed MCP endpoint.
+business and knowledge retrieval still runs through the configured MCP
+endpoint (native FastMCP on ARM64 or managed Azure Functions on x64).
+
+Approval decisions use `FABRIC_APPROVAL_NOTEBOOK_ID`. The frontend submits an
+explicit `APPROVED` or `REJECTED` decision, waits for the Fabric notebook job,
+and displays its audit ID. The notebook verifies the exception exists before
+appending to `action_approvals`; it never updates the SQL analytics endpoint.
 
 ## OneLake configuration
 
@@ -114,6 +174,7 @@ The governed business source uses these configured Fabric objects:
 * Lakehouse ID: `<fabric-lakehouse-id>`
 * Table: `dbo.<source-table-name>`
 * Summary view: `dbo.<summary-view-name>`
+* Approval notebook: `<fabric-approval-notebook-id>`
 
 Provide the environment-specific coordinates in `.env` and
 `mcp-server/local.settings.json` using the committed examples. Copy the latter
@@ -121,8 +182,10 @@ to `mcp-server/local.settings.json` before starting the Functions host. The
 local file is ignored by Git because it is the place for runtime secrets and
 local overrides.
 
-The identity used to run the host needs access to the Fabric workspace and
-Lakehouse. OneLake DFS access uses a Microsoft Entra token for
+The identity used to run the host needs read access to the Fabric Lakehouse and
+permission to run the configured notebook. Provisioning or updating the
+notebook requires Fabric workspace Contributor and `Notebook.ReadWrite.All` or
+`Item.ReadWrite.All`. OneLake DFS access uses a Microsoft Entra token for
 `https://storage.azure.com/`. A quick connectivity check lists the governed
 schema at:
 
@@ -130,9 +193,9 @@ schema at:
 https://onelake.dfs.fabric.microsoft.com/<workspace-id>/<lakehouse-id>/Tables/dbo
 ```
 
-The expected entries are the configured source table and summary view.
-Read access should use the curated summary view; the action tool remains
-proposal-only and requires explicit human approval.
+The expected entries are the configured source table and summary view. Read
+access uses that source; approval writes are isolated in the append-only
+`action_approvals` table and require an explicit approver identity.
 
 ## Tests
 
@@ -175,8 +238,9 @@ The Function App's managed identity and data-plane roles remain unchanged.
 Microsoft Entra authentication must be enforced at the deployed Functions
 ingress, with managed identity and least-privilege RBAC used between services.
 The MCP extension webhook is anonymous because platform Easy Auth owns that
-boundary; do not deploy it publicly without Easy Auth. Actions remain
-proposal-only and use synthetic in-memory state.
+boundary; do not deploy it publicly without Easy Auth. The sample approval UI
+accepts an approver identifier for demonstration; production must derive that
+identity from authenticated claims rather than trusting free-text input.
 
 ## Troubleshooting
 

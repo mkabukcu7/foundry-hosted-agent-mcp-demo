@@ -4,15 +4,23 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env")
 env = {
     **os.environ,
     "PYTHONPATH": str(ROOT),
     "languageWorkers__python__defaultExecutablePath": sys.executable,
 }
+mcp_command = (
+    [sys.executable, "local_mcp.py"]
+    if os.getenv("USE_LOCAL_MCP") == "1"
+    else ["func", "start", "--port", "8001"]
+)
 processes = [
     subprocess.Popen(
-        ["func", "start", "--port", "8001"],
+        mcp_command,
         cwd=ROOT / "mcp-server",
         env=env,
     ),

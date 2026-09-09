@@ -9,10 +9,10 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true">H</span>
       <div>
-        <strong>HWC Governed Operations</strong>
-        <span>Exception briefing workspace</span>
+        <span class="brand-context">Governed decision workspace</span>
+        <strong>Resolve exceptions faster, without losing control</strong>
+        <span class="brand-value">Live Fabric evidence <span aria-hidden="true">&#183;</span> Auditable approvals</span>
       </div>
     </div>
     <div id="system-status" class="system-status" aria-label="System status">
@@ -26,22 +26,26 @@
   <main class="workspace">
     <aside class="entity-rail">
       <div class="rail-heading">
-        <span class="eyebrow">Active queue</span>
-        <strong>All exceptions</strong>
+        <div>
+          <span class="eyebrow">Active queue</span>
+          <strong>All exceptions</strong>
+        </div>
+        <button id="refresh-entities" class="refresh-button" type="button" aria-label="Refresh exceptions from Fabric" title="Refresh exceptions from Fabric">&#8635;</button>
       </div>
-      <div id="entity-list" class="entity-list" aria-live="polite">
-        <div class="entity-loading">Loading governed records...</div>
-      </div>
+      <label class="entity-picker-label" for="entity-select">Exception record</label>
+      <select id="entity-select" class="entity-select" disabled>
+        <option>Loading governed records...</option>
+      </select>
       <div class="rail-note">
         <span class="lock" aria-hidden="true">&#9632;</span>
-        <p><strong>Governed access</strong>Business records are read through the configured Fabric view. Actions remain proposal-only.</p>
+        <p><strong>Governed access</strong>Business records stay read-only. Approval decisions are appended to the Fabric audit log.</p>
       </div>
     </aside>
 
     <section class="briefing" aria-labelledby="briefing-title">
       <div class="briefing-header">
         <div>
-          <span id="entity-eyebrow" class="eyebrow">Select an entity</span>
+          <span id="entity-eyebrow" class="eyebrow">Select an exception</span>
           <h1 id="briefing-title">Exception briefing</h1>
         </div>
         <span id="status-badge" class="status-badge">Loading</span>
@@ -108,7 +112,13 @@
           <span>Approval boundary</span>
           <strong id="approval-status">Not requested</strong>
         </div>
-        <p>The agent may prepare a proposed action, but no execution endpoint is available.</p>
+        <p>Decisions are validated and appended to the governed Fabric approval log.</p>
+        <label class="approver-label" for="approver">Approver identity</label>
+        <input id="approver" class="approver-input" type="text" autocomplete="username" placeholder="name@organization.com">
+        <div class="approval-actions">
+          <button id="reject-approval" type="button">Reject</button>
+          <button id="approve-approval" type="button">Approve</button>
+        </div>
       </section>
 
       <section class="data-path">

@@ -40,6 +40,11 @@ class HostedAgent:
                     item.text for item in result.content if hasattr(item, "text")
                 )
                 raise RuntimeError(details or "MCP tool call failed")
+            structured = getattr(result, "structuredContent", None)
+            if structured is not None:
+                if set(structured) == {"result"}:
+                    return structured["result"]
+                return structured
             text = next(item.text for item in result.content if hasattr(item, "text"))
             try:
                 return json.loads(text)

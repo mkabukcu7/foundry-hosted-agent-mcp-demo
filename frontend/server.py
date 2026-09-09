@@ -4,13 +4,18 @@ import json
 import sys
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
+
+from dotenv import load_dotenv
 
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = Path(__file__).resolve().parent
+load_dotenv(ROOT / ".env")
 sys.path.insert(0, str(ROOT))
 
 from agent.agent import HostedAgent  # noqa: E402
+from frontend.fabric_approvals import submit_approval  # noqa: E402
 
 
 class DemoHandler(SimpleHTTPRequestHandler):
@@ -18,18 +23,20 @@ class DemoHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(FRONTEND), **kwargs)
 
     def do_GET(self):
-        if self.path == "/api/health":
+        request = urlsplit(self.path)
+        if request.path == "/api/health":
             try:
                 HostedAgent().discover_tools()
                 self._json_response(200, {"status": "ready", "mcp": "connected"})
             except Exception as error:
                 self._json_response(503, {"status": "unavailable", "mcp": "disconnected", "error": str(error)})
             return
-        if self.path == "/api/entities":
+        if request.path == "/api/entities":
             try:
+                refresh = parse_qs(request.query).get("refresh") == ["1"]
                 self._json_response(
                     200,
-                    {"entities": HostedAgent().call("list_business_summaries", {})},
+                    {"entities": HostedAgent().call("list_business_summaries", {"refresh": refresh})},
                 )
             except Exception as error:
                 self._json_response(502, {"error": f"Unable to load entities: {error}"})
@@ -37,13 +44,21 @@ class DemoHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
-        if self.path != "/api/respond":
+        if self.path not in {"/api/respond", "/api/approvals"}:
             self.send_error(404)
             return
 
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
+            if self.path == "/api/approvals":
+                result = submit_approval(
+                    payload.get("entity_id", ""),
+                    payload.get("decision", ""),
+                    payload.get("approver", ""),
+                )
+                self._json_response(200, result)
+                return
             prompt = str(payload.get("prompt", "")).strip()
             if not prompt:
                 raise ValueError("Enter a question for the agent.")

@@ -34,7 +34,11 @@ def call_tool(name, arguments):
         limit = optional_positive_int(arguments.get("maximum_results"), "maximum_results", 5)
         return [item for item in KNOWLEDGE if (not category or item["category"] == category) and query in (item["title"] + " " + item["summary"]).lower()][:limit]
     if name == "list_business_summaries":
-        _ensure_state()
+        if arguments.get("refresh"):
+            STATE.clear()
+            STATE.update(get_business_records())
+        else:
+            _ensure_state()
         return [copy.deepcopy(STATE[key]) for key in sorted(STATE)]
     if name == "get_business_summary":
         _ensure_state()

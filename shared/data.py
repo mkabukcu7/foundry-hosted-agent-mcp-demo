@@ -12,8 +12,6 @@ import re
 import struct
 from datetime import date, datetime
 
-from azure.identity import DefaultAzureCredential
-
 
 _NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -64,6 +62,8 @@ def _query_fabric():
     """Read the governed summary view from the Fabric SQL analytics endpoint."""
     if os.getenv("HWC_DATA_SOURCE", "synthetic").lower() != "fabric":
         return []
+
+    from azure.identity import DefaultAzureCredential
 
     server = os.getenv("FABRIC_SQL_ENDPOINT")
     database = os.getenv("FABRIC_SQL_DATABASE", os.getenv("FABRIC_LAKEHOUSE_NAME", ""))

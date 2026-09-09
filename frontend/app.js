@@ -6,11 +6,17 @@ const tools = document.querySelector("#tools");
 const sources = document.querySelector("#sources");
 const approvalPanel = document.querySelector("#approval-panel");
 const approvalStatus = document.querySelector("#approval-status");
-const entityList = document.querySelector("#entity-list");
+const approverInput = document.querySelector("#approver");
+const approveButton = document.querySelector("#approve-approval");
+const rejectButton = document.querySelector("#reject-approval");
+const entitySelect = document.querySelector("#entity-select");
+const refreshButton = document.querySelector("#refresh-entities");
 const statusDot = document.querySelector("#status-dot");
 const systemStatusMessage = document.querySelector("#system-status-message");
+let entities = [];
 let selectedEntity = null;
 let requestInFlight = false;
+let approvalInFlight = false;
 
 function promptFor(type) {
   const entityId = selectedEntity?.entity_id || "HWC-1001";
@@ -38,10 +44,7 @@ function selectEntity(entity) {
   document.querySelector("#detail-due-date").textContent = formatDate(entity.due_date);
   document.querySelector("#detail-last-review").textContent = formatDate(entity.last_review_date);
   document.querySelector("#detail-updated").textContent = formatDate(entity.source_last_updated, true);
-  document.querySelectorAll(".entity").forEach(button => {
-    button.classList.toggle("active", button.dataset.entityId === entity.entity_id);
-    button.setAttribute("aria-pressed", button.dataset.entityId === entity.entity_id);
-  });
+  entitySelect.value = entity.entity_id;
 }
 
 function setSystemStatus(connected, message) {
@@ -49,35 +52,120 @@ function setSystemStatus(connected, message) {
   statusDot.classList.toggle("error", !connected);
 }
 
-async function loadEntities() {
+function resetBriefing() {
+  conversation.replaceChildren();
+  tools.className = "empty-evidence";
+  tools.textContent = "Retrieving MCP activity...";
+  sources.className = "empty-evidence";
+  sources.textContent = "Retrieving governed sources...";
+  approvalPanel.classList.remove("pending");
+  approvalStatus.textContent = "Not requested";
+}
+
+function setApprovalControls(disabled) {
+  approveButton.disabled = disabled;
+  rejectButton.disabled = disabled;
+  approverInput.disabled = disabled;
+}
+
+async function submitApproval(decision) {
+  if (approvalInFlight || !selectedEntity) return;
+  const approver = approverInput.value.trim();
+  if (!approver) {
+    approvalStatus.textContent = "Approver required";
+    approverInput.focus();
+    return;
+  }
+
+  approvalInFlight = true;
+  setApprovalControls(true);
+  approvalPanel.classList.add("pending");
+  approvalStatus.textContent = "Recording decision...";
+  try {
+    const response = await fetch("/api/approvals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entity_id: selectedEntity.entity_id,
+        decision,
+        approver
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "The approval decision could not be recorded.");
+    approvalPanel.classList.toggle("approved", decision === "APPROVED");
+    approvalPanel.classList.toggle("rejected", decision === "REJECTED");
+    approvalPanel.classList.remove("pending");
+    approvalStatus.textContent = decision === "APPROVED" ? "Approved" : "Rejected";
+    addMessage(
+      "agent",
+      `${selectedEntity.entity_id} was ${decision.toLowerCase()} by ${approver}. Approval ID: ${result.approval_id || "recorded in Fabric"}.`
+    );
+  } catch (error) {
+    approvalPanel.classList.remove("pending");
+    approvalStatus.textContent = "Decision failed";
+    addMessage("agent", error.message, true);
+  } finally {
+    approvalInFlight = false;
+    setApprovalControls(false);
+  }
+}
+
+async function loadEntities({ refresh = false, summarize = false } = {}) {
+  const selectedEntityId = selectedEntity?.entity_id;
+  refreshButton.disabled = true;
+  refreshButton.classList.toggle("refreshing", refresh);
   try {
     const healthResponse = await fetch("/api/health");
     const health = await healthResponse.json();
     if (!healthResponse.ok) throw new Error(health.error || "MCP is unavailable.");
     setSystemStatus(true, "MCP connected");
-    const response = await fetch("/api/entities");
+    const response = await fetch(`/api/entities${refresh ? "?refresh=1" : ""}`);
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Unable to load entities.");
-    entityList.replaceChildren();
-    for (const entity of result.entities) {
-      const button = document.createElement("button");
-      button.className = "entity";
-      button.type = "button";
-      button.dataset.entityId = entity.entity_id;
-      button.innerHTML = `<span class="severity" aria-hidden="true"></span><span><strong></strong><small></small></span><span class="severity-label"></span>`;
-      button.querySelector("strong").textContent = entity.entity_id;
-      button.querySelector("small").textContent = entity.current_status || entity.status;
-      button.querySelector(".severity-label").textContent = entity.severity || "-";
-      button.addEventListener("click", () => selectEntity(entity));
-      entityList.append(button);
+    entities = result.entities;
+    entitySelect.replaceChildren();
+    for (const entity of entities) {
+      const option = document.createElement("option");
+      const severity = entity.severity ? ` · ${entity.severity}` : "";
+      option.value = entity.entity_id;
+      option.textContent = `${entity.entity_id}${severity}`;
+      entitySelect.append(option);
     }
-    if (result.entities.length) selectEntity(result.entities[0]);
+    entitySelect.disabled = !entities.length;
+    const nextEntity = entities.find(entity => entity.entity_id === selectedEntityId) || entities[0];
+    if (nextEntity) {
+      selectEntity(nextEntity);
+      if (summarize) {
+        resetBriefing();
+        await submitPrompt(promptFor("summary"));
+      }
+    }
   } catch (error) {
     setSystemStatus(false, "MCP unavailable");
-    entityList.innerHTML = `<div class="entity-loading error-text"></div>`;
-    entityList.firstElementChild.textContent = error.message;
+    entitySelect.replaceChildren(new Option(error.message));
+    entitySelect.disabled = true;
+  } finally {
+    refreshButton.disabled = false;
+    refreshButton.classList.remove("refreshing");
   }
 }
+
+entitySelect.addEventListener("change", () => {
+  const entity = entities.find(item => item.entity_id === entitySelect.value);
+  if (entity) {
+    selectEntity(entity);
+    resetBriefing();
+    submitPrompt(promptFor("summary"));
+  }
+});
+
+refreshButton.addEventListener("click", () => {
+  loadEntities({ refresh: true, summarize: true });
+});
+
+approveButton.addEventListener("click", () => submitApproval("APPROVED"));
+rejectButton.addEventListener("click", () => submitApproval("REJECTED"));
 
 function addMessage(role, text, isError = false) {
   const welcome = conversation.querySelector(".welcome");
@@ -111,6 +199,7 @@ async function submitPrompt(prompt) {
   addMessage("user", prompt);
   input.value = "";
   sendButton.disabled = true;
+  entitySelect.disabled = true;
 
   const loading = document.createElement("article");
   loading.className = "message agent";
@@ -138,6 +227,7 @@ async function submitPrompt(prompt) {
   } finally {
     requestInFlight = false;
     sendButton.disabled = false;
+    entitySelect.disabled = false;
     input.focus();
   }
 }
