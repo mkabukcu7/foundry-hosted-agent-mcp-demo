@@ -91,8 +91,16 @@ class DemoHandler(SimpleHTTPRequestHandler):
 
     def _assurance_request(self):
         try:
+            host = self.headers.get("Host", "")
+            authority = urlsplit("//" + host)
+            if (authority.hostname not in {"localhost", "127.0.0.1", "::1"}
+                    or authority.username is not None or authority.password is not None
+                    or authority.path or authority.query or authority.fragment
+                    or authority.port != self.server.server_port):
+                self._json_response(403, {"error": "Loopback Host required."})
+                return
             origin = self.headers.get("Origin")
-            if origin and urlsplit(origin).netloc != self.headers.get("Host"):
+            if origin and (urlsplit(origin).scheme != "http" or urlsplit(origin).netloc != host):
                 self._json_response(403, {"error": "Same-origin requests only."})
                 return
             length = int(self.headers.get("Content-Length", "0"))

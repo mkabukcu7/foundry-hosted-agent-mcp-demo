@@ -9,6 +9,15 @@ DESTINATION = ROOT / "deployment" / "contract-assurance" / ".build" / "agent-cod
 
 
 def stage(destination=DESTINATION):
+    destination = Path(destination)
+    if destination.is_symlink() or destination.is_junction():
+        raise ValueError("Refusing to replace a linked staging directory.")
+    destination = destination.resolve()
+    if (destination.name != "agent-code" or destination == ROOT or destination in ROOT.parents
+            or destination == Path.home().resolve()):
+        raise ValueError("Staging requires a dedicated agent-code directory, not a workspace, home, or filesystem root.")
+    if destination.exists():
+        shutil.rmtree(destination)
     destination.mkdir(parents=True, exist_ok=True)
     for package in ("agent", "shared"):
         target = destination / package

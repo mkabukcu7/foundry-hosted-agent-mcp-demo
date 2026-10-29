@@ -13,6 +13,20 @@ for versions, approvals, and trace IDs.
 
 ## Request-Context And Scoped Permission Investigation
 
+### PR #5 Follow-Up: Local Verification Complete, Cloud Approval Pending
+
+All five review findings are fixed, with 49 passing focused tests and compile/
+whitespace validation. A real-model local browser run against the corrected
+agents and synthetic MCP passed comparison/citations, exact document handoff,
+follow-up reuse, acknowledged reset, and new contexts afterward. Local metadata
+verifies all five business trace trees. Live negative checks verified Host
+rejection and reset recovery after a rejected stale transport continuation.
+
+Explicit approval to redeploy the three existing hosted agents was requested but
+unavailable. No Azure deployment, provisioning, permission, or model changes
+were made. Hosted v8/v5/v5 remains the earlier baseline; corrected hosted
+verification must follow a separately approved redeployment.
+
 ### Approved Responses Migration; Hosted Verification Complete
 
 - User selected supported Responses communication between the three existing

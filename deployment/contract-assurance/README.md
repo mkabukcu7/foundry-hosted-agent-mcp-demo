@@ -10,6 +10,48 @@ After initially stopping cloud changes and declining a temporary private runner,
 the user approved read-only diagnosis and one controlled MCP publish retry.
 That retry succeeded without further network, identity, or permission changes.
 
+### PR #5 Fixes: Corrected Local Live Demo; Hosted Redeployment Pending
+
+- All five review findings are fixed: loopback Host validation before assurance
+  session creation/forwarding, reset without stale specialist Responses
+  continuation, bounded specialist cleanup, fail-closed unresolved browser calls,
+  and clean source-only restaging.
+- The focused suite now passes 49 tests, including 10 new review regressions.
+  Compile and whitespace checks pass. Cleanup tests cover expired document/history
+  eviction, old replay rejection, active/queued-call protection, explicit capacity
+  limits, and idle periodic maintenance. Retries keep timestamped operation IDs;
+  after expiry they fail closed instead of re-running an evicted request.
+- A corrected-code browser demo used separate local agents with the existing real
+  Foundry model and the local synthetic MCP service. No Azure resource or
+  permission changes, provisioning, or deployment occurred. Hosted redeployment
+  approval was unavailable; the active Azure versions in the table below still
+  contain the earlier code. This local run is not new hosted verification.
+- All three browser turns passed: three discrepancies/matching EU residency with
+  eight citations; exact generated-document read and version-2 annotation lineage;
+  and service-credit follow-up with the same reused RFP context. Reset received
+  the actual `contexts_reset` receipt; the next comparison had new specialist
+  tags and `session_reused=false`. No browser error messages appeared.
+- Synthetic artifact `da132edc9be3493ba0f21ad95d2943c9` version 1 read/parent
+  SHA-256 was `e0cf2fad4d4a5af259ed8d804ce52b708ec41d3b11ca232eb3f0cecf0e966f50`.
+  The version-2 annotation retained that exact parent reference.
+- Manual local metadata confirmed 12 successful specialist sends, 10 successful
+  retrievals, and five fully linked successful business trees:
+
+  | Operation | Trace ID |
+  | --- | --- |
+  | Initial comparison | `34a9c906bc3b458891a7d48179625c3d` |
+  | Document handoff | `74224f9ae8204e1cabcaa3d3176f7e9e` |
+  | Document-turn comparison | `8ba2883680324babaa413cd4995ce258` |
+  | Service-credit follow-up | `8ee9509b1c934a6f885821a548fdb6ba` |
+  | Fresh comparison after reset | `10afb1ab808943e7ae4316f582d74eb7` |
+
+- An actual request with matching attacker Host/Origin returned 403 before
+  session creation. A separate live specialist test intentionally supplied a lost
+  continuation: the real Responses host rejected it with HTTP 400, then the
+  corrected reset succeeded without that continuation and the next model call
+  confirmed fresh history. Other failure paths are covered by deterministic
+  regression tests, not claimed injected into Azure.
+
 ### MCP Publish Result (13:04 UTC)
 
 - Deployment `06b89ba7-8192-46fa-8dc8-bee34a403d57`, `LegionOneDeploy`,
@@ -231,6 +273,9 @@ tests pass. Agent Framework core remains pinned at 1.15.0.
 Run `scripts/package_assurance.py` to stage the allowlisted code and dependencies
 inside `.build/agent-code`. Foundry requires service paths to remain inside this
 deployment project. Generated files and local azd environment files are ignored.
+Restaging replaces only the dedicated `agent-code` directory instead of overlaying
+it, so removed modules, binaries, and other stale files cannot enter later packages.
+Broad destinations and linked staging directories are rejected.
 The manifest uses Python 3.13 code deployment, not the optional Dockerfile.
 
 Reference: [official A2A migration guide](https://github.com/a2aproject/a2a-python/blob/v1.2.3/docs/migrations/v1_0/README.md).

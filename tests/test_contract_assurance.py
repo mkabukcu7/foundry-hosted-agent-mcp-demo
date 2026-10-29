@@ -10,7 +10,7 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from agent.assurance_runtime import A2ARemote, PRINCIPAL, SpecialistSessions, metadata_span, validate_endpoint
+from agent.assurance_runtime import A2ARemote, PRINCIPAL, SpecialistSessions, metadata_span, validate_endpoint, new_request_id
 from agent.contract_specialist import RETRIEVED, CallerBoundary, SpecialistExecutor, create_app
 from agent.assurance_protocol import RequestContext, Message, MessageSendParams, Part, Role, TextPart
 import httpx
@@ -124,7 +124,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
                 results.append(message.parts[0].root.data)
         token = PRINCIPAL.set("alice")
         try:
-            request = MessageSendParams(message=Message(role=Role.user, message_id="resume",
+            request = MessageSendParams(message=Message(role=Role.user, message_id=new_request_id(),
                 context_id="lost-context", parts=[Part(root=TextPart(text="Continue"))]),
                 metadata={"assurance_resume": True})
             await executor.execute(RequestContext(request=request), Queue())
@@ -163,7 +163,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
             token = PRINCIPAL.set(principal)
             try:
                 context = RequestContext(request=MessageSendParams(message=Message(
-                    role=Role.user, message_id=str(len(results)), context_id="same-id",
+                    role=Role.user, message_id=new_request_id(), context_id="same-id",
                     parts=[Part(root=TextPart(text="Question"))])))
                 await executor.execute(context, Queue())
             finally:
@@ -181,7 +181,7 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         token = PRINCIPAL.set("alice")
         try:
             context = RequestContext(request=MessageSendParams(message=Message(
-                role=Role.user, message_id="test", parts=[Part(root=TextPart(text="Missing clause?"))])))
+                role=Role.user, message_id=new_request_id(), parts=[Part(root=TextPart(text="Missing clause?"))])))
             await SpecialistExecutor(NoEvidenceAnalyst(), "contract").execute(context, Queue())
         finally:
             PRINCIPAL.reset(token)

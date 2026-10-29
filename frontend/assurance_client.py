@@ -51,6 +51,7 @@ def execution_receipts(response):
 class BrowserSession:
     owner: str
     previous_response_id: str | None = None
+    unresolved: bool = False
     lock: Lock = field(default_factory=Lock)
 
 
@@ -79,6 +80,8 @@ class AssuranceGateway:
         headers = asyncio.run(auth_headers(url))
         with session.lock, OpenAI(base_url=url, api_key=headers.get("Authorization", "Bearer local-demo")[7:],
                                  timeout=180, max_retries=0, default_query=api_version_params(url)) as client:
+            if session.unresolved:
+                raise RuntimeError("A previous hosted call has an unresolved outcome. Its histories cannot be safely resumed or reset.")
             options = {"input": prompt, "store": True}
             if session.previous_response_id:
                 options["previous_response_id"] = session.previous_response_id
@@ -87,6 +90,7 @@ class AssuranceGateway:
                     return {"output_text": "Conversation reset.", "mode": "live", "reset": True}
                 options["input"] = "Reset both specialist contexts now."
                 options["tool_choice"] = {"type": "function", "name": "reset_assurance_context"}
+            session.unresolved = True
             response = client.responses.create(**options)
             if response.status != "completed":
                 raise RuntimeError("Live orchestrator did not complete; no mock result was substituted.")
@@ -94,5 +98,6 @@ class AssuranceGateway:
             if reset and not any(receipt["status"] == "contexts_reset" for receipt in receipts):
                 raise RuntimeError("Reset was not confirmed by an execution receipt. Context has not been silently discarded.")
             session.previous_response_id = None if reset else response.id
+            session.unresolved = False
             return {"output_text": response.output_text, "mode": "live", "reset": reset,
                     "execution_receipts": receipts}

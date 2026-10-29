@@ -17,6 +17,13 @@ MCP transports, and approval controls remain preserved.
 
 ## Coverage
 
+PR #5 follow-up: all five review findings are fixed and 49 focused tests pass.
+A real-model local browser demo of the corrected code verified all three turns,
+exact document lineage, reset, fresh contexts, and linked metadata traces.
+Actual local Host rebinding rejection and expired Responses continuation recovery
+were also verified. Corrected Azure redeployment awaits explicit approval;
+the earlier hosted results below remain evidence for v8/v5/v5, not these fixes.
+
 | Requirement | Status | Supporting implementation and evidence |
 | --- | --- | --- |
 | Separately hosted Foundry agents communicate | **HOSTED VERIFIED** | Three distinct `kind: hosted` services in [deployment manifest](../deployment/contract-assurance/azure.yaml); v8/v5/v5 completed real Responses calls with signed caller validation and MCP retrieval. |
@@ -93,6 +100,13 @@ ambiguous outcome blocks a different request until the same operation is retried
 or explicitly reset. Concurrent parent operations serialize with reset; partial
 reset failure leaves both specialists blocked rather than claiming success.
 Caches and history are process-local and expire; restart/expiry requires reset.
+Specialist maintenance now deletes expired history and replay payloads, skips
+in-flight/queued work, and caps each registry at 1,024 entries with explicit
+capacity errors. Timestamped operation IDs reject stale replay after eviction.
+The Responses reset transport omits the prior response ID, retaining explicit
+application-context/reset acknowledgement semantics. The browser gateway rejects
+non-loopback Host values before creating sessions and fails closed after an
+unresolved first or subsequent call, including reset requests.
 
 ## Verification Performed
 

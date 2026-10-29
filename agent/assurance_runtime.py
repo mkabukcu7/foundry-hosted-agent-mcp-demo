@@ -33,6 +33,10 @@ class SpecialistCallFailed(RuntimeError):
     pass
 
 
+def new_request_id():
+    return f"{time.time_ns()}-{uuid4().hex}"
+
+
 def configure_privacy():
     from agent_framework.observability import disable_instrumentation
 
@@ -162,7 +166,7 @@ class A2ARemote:
 
     async def send(self, question, context_id=None, reset=False, *, request_id=None, action="query", artifact=None,
                    scope=None, abandon_request=None):
-        operation_id = request_id or uuid4().hex
+        operation_id = request_id or new_request_id()
         parts = [Part(root=TextPart(text=question))]
         if artifact is not None:
             parts.extend(Part.model_validate(part) for part in artifact["parts"])
@@ -214,7 +218,7 @@ class ResponsesRemote(A2ARemote):
             headers["x-client-assurance-authorization"] = authorization
         payload = {"input": request.model_dump_json(by_alias=True, exclude_none=True),
                    "store": True, "stream": False}
-        if previous := self.continuations.get(context_id):
+        if not metadata.get("assurance_reset") and (previous := self.continuations.get(context_id)):
             payload["previous_response_id"] = previous
         async with httpx.AsyncClient(headers=headers, params=api_version_params(self.url), timeout=180,
                                      follow_redirects=False, event_hooks={"response": [capture_http_status]}) as client:
@@ -262,7 +266,7 @@ class SpecialistSessions:
             digest = hashlib.sha256(json.dumps([question, action, artifact], sort_keys=True).encode()).hexdigest()
             if state.pending_id and state.pending_digest != digest:
                 raise SpecialistCallFailed("Previous specialist outcome is unresolved. Retry the same request or explicitly reset.")
-            state.pending_id = state.pending_id or uuid4().hex
+            state.pending_id = state.pending_id or new_request_id()
             state.pending_digest = digest
             reused = state.context_id is not None
             with metadata_span(f"delegate.{specialist}", "|".join(key), reused):
@@ -304,7 +308,7 @@ class SpecialistSessions:
                 if state.context_id is not None or state.pending_id:
                     _, result = await self.remotes[specialist].send(
                         "Reset specialist context.", state.context_id, reset=True,
-                        request_id=uuid4().hex, action="query", scope=conversation_scope(principal, parent_session),
+                        request_id=new_request_id(), action="query", scope=conversation_scope(principal, parent_session),
                         abandon_request=state.pending_id)
                     if not result.get("context_reset"):
                         raise ContextUnavailable("Specialist reset was not acknowledged; continuity remains blocked.")

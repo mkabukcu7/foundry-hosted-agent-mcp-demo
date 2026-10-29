@@ -4,6 +4,7 @@ import asyncio
 import ast
 from copy import deepcopy
 from contextvars import ContextVar
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 import json
 import hashlib
@@ -72,20 +73,46 @@ class RequestReplay:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     result: dict | None = None
     created: float = field(default_factory=time.monotonic)
+    users: int = 0
 
 
 class SpecialistExecutor(AgentExecutor):
-    def __init__(self, agent, document_set, ttl_seconds=1800):
+    def __init__(self, agent, document_set, ttl_seconds=1800, max_entries=1024):
         self.agent = agent
         self.document_set = document_set
         self.sessions = {}
         self.ttl_seconds = ttl_seconds
         self.requests = {}
+        self.max_entries = max_entries
+
+    def cleanup(self):
+        now = time.monotonic()
+        active = {(key[0], replay.context_id) for key, replay in self.requests.items() if replay.users}
+        for key, state in list(self.sessions.items()):
+            if key not in active and not state.lock.locked() and now - state.last_used > self.ttl_seconds:
+                del self.sessions[key]
+        for key, replay in list(self.requests.items()):
+            if not replay.users and not replay.lock.locked() and now - replay.created > self.ttl_seconds:
+                del self.requests[key]
+
+    async def maintain(self):
+        while True:
+            await asyncio.sleep(min(60, self.ttl_seconds / 2))
+            self.cleanup()
 
     async def execute(self, context, event_queue):
         principal = PRINCIPAL.get()
         if not principal or not context.context_id:
             raise RuntimeError("An authenticated caller and context are required.")
+        self.cleanup()
+        # A timestamped operation ID lets us forget expired replies without accepting an old replay as new work.
+        match = re.fullmatch(r"([0-9]{19,20})-[0-9a-f]{32}", context.message.message_id)
+        if match is None:
+            raise ValueError("A timestamped specialist request ID is required.")
+        age = time.time() - int(match[1]) / 1_000_000_000
+        if age > self.ttl_seconds or age < -60:
+            await self._reply(event_queue, context.context_id, {"status": "context_expired", "context_reused": False})
+            return
         metadata = {name: value for name, value in context.metadata.items() if name != "assurance_trace"}
         digest = hashlib.sha256(json.dumps([context.get_user_input(), metadata,
                                            [part.model_dump() for part in context.message.parts]],
@@ -93,17 +120,23 @@ class SpecialistExecutor(AgentExecutor):
         request_key = (principal, context.message.message_id)
         abandoned = self.requests.get((principal, context.metadata.get("assurance_abandon_request")))
         context_id = abandoned.context_id if abandoned and context.metadata.get("assurance_reset") else context.context_id
+        if request_key not in self.requests and len(self.requests) >= self.max_entries:
+            raise RuntimeError("Specialist request capacity reached. Retry after inactive entries expire.")
         replay = self.requests.setdefault(request_key, RequestReplay(digest, context_id))
-        async with replay.lock:
-            if replay.digest != digest:
-                raise ValueError("A request ID cannot be reused with different input.")
-            if replay.result is not None:
-                if time.monotonic() - replay.created > self.ttl_seconds:
-                    await self._reply(event_queue, replay.context_id, {"status": "context_expired", "context_reused": False})
+        replay.users += 1
+        try:
+            async with replay.lock:
+                if replay.digest != digest:
+                    raise ValueError("A request ID cannot be reused with different input.")
+                if replay.result is not None:
+                    if time.monotonic() - replay.created > self.ttl_seconds:
+                        await self._reply(event_queue, replay.context_id, {"status": "context_expired", "context_reused": False})
+                        return
+                    await self._reply(event_queue, replay.context_id, replay.result)
                     return
-                await self._reply(event_queue, replay.context_id, replay.result)
-                return
-            await self._execute(context, event_queue, principal, replay)
+                await self._execute(context, event_queue, principal, replay)
+        finally:
+            replay.users -= 1
 
     async def _reply(self, event_queue, context_id, data):
         data = deepcopy(data)
@@ -119,11 +152,13 @@ class SpecialistExecutor(AgentExecutor):
     async def _execute(self, context, event_queue, principal, replay):
         key = (principal, replay.context_id)
         state = self.sessions.get(key)
-        expired = state is None or time.monotonic() - state.last_used > self.ttl_seconds
+        expired = state is None or (not state.lock.locked() and time.monotonic() - state.last_used > self.ttl_seconds)
         if expired and context.metadata.get("assurance_resume") and not context.metadata.get("assurance_reset"):
             await self._reply(event_queue, replay.context_id, {"status": "context_expired", "context_reused": False})
             return
         if expired:
+            if state is None and len(self.sessions) >= self.max_entries:
+                raise RuntimeError("Specialist session capacity reached. Retry after inactive entries expire.")
             state = AnalystContext(self.agent.create_session())
             self.sessions[key] = state
         async with state.lock:
@@ -195,6 +230,7 @@ class SpecialistExecutor(AgentExecutor):
                     return
                 finally:
                     RETRIEVED.reset(token)
+                    state.last_used = time.monotonic()
             replay.result = data
             await self._reply(event_queue, replay.context_id, data)
 
@@ -287,6 +323,20 @@ def create_responses_app(agent, document_set):
 
     executor = SpecialistExecutor(agent, document_set)
     app = ResponsesAgentServerHost(configure_observability=None)
+    original_lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(host):
+        async with original_lifespan(host):
+            maintenance = asyncio.create_task(executor.maintain())
+            try:
+                yield
+            finally:
+                maintenance.cancel()
+                with suppress(asyncio.CancelledError):
+                    await maintenance
+
+    app.router.lifespan_context = lifespan
 
     @app.response_handler
     async def respond(request, context, cancellation_signal):

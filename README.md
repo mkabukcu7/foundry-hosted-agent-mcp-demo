@@ -174,6 +174,13 @@ Responses 2.0. Original HWC v6 is unchanged.
 MCP publishing succeeded at 13:04 UTC; all six triggers are indexed
 and both specialists performed authenticated retrieval.
 
+**PR #5 follow-up:** five review fixes now pass 49 focused tests and a
+corrected-code, real-model local browser demo (including reset and stale
+continuation recovery). Those fixes have not been redeployed to Azure because
+explicit redeployment approval was unavailable; v8/v5/v5 remains the earlier
+verified hosted baseline. Details are in the
+[deployment record](deployment/contract-assurance/README.md).
+
 The verifier checked three discrepancies, matching EU residency, all eight
 citations, exact generated-document read/annotation lineage, and reused RFP
 context on the service-credit follow-up. Existing Application Insights contains
@@ -241,6 +248,12 @@ The verified local Responses route is `/responses`, not `/v1/responses`.
 The browser sends an opaque application session ID; raw response IDs remain
 server-side, mapped to an HttpOnly, SameSite browser-owner cookie. This frontend
 is a loopback-only demo, not a multi-user authenticated production gateway.
+Assurance API requests require a loopback Host on the actual listening port
+before session creation or forwarding; matching arbitrary Host/Origin headers
+are not trusted. If a hosted call has an unresolved outcome (including a lost
+first response), the gateway blocks further calls and reset rather than falsely
+claiming remote histories were cleared. A fresh browser review is separate from
+an acknowledged reset of the abandoned review.
 
 Send these prompts **in the same conversation**, in order:
 
@@ -299,6 +312,12 @@ to reinterpret commands or fabricate receipts. Each input is processed once;
 previous transcripts are not replayed into the executor.
 Storage is in memory and single-process; restarts lose context and now require an
 explicit reset. Unknown/expired state is never silently recreated as reused.
+Specialist history and cached replies are evicted after 30 minutes of inactivity/
+request age, with periodic maintenance and a 1,024-entry cap on each registry.
+Cleanup protects active calls and queued retries. Timestamped operation IDs let
+expired requests fail closed after their cached content has been deleted;
+retries must retain the original ID. Specialist resets omit transport continuations
+so an expired stored Responses record cannot prevent an application-context reset.
 Logical request IDs deduplicate successful retries; failed calls roll back history,
 and ambiguous calls block different input until retry or reset. Do not treat
 context IDs or trace tags as credentials. Reset clears active context, not a

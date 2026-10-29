@@ -14,7 +14,7 @@ import httpx
 from agent.assurance_protocol import RequestContext, Message, MessageSendParams, Part, Role, TextPart
 
 from agent.assurance_artifacts import ArtifactRejected, make_document, read_document, reference
-from agent.assurance_runtime import A2ARemote, ContextUnavailable, PRINCIPAL, SpecialistCallFailed, SpecialistSessions
+from agent.assurance_runtime import A2ARemote, ContextUnavailable, PRINCIPAL, SpecialistCallFailed, SpecialistSessions, new_request_id
 from agent.contract_specialist import RETRIEVED, SpecialistExecutor, create_app
 from shared.contract_assurance import retrieve_terms
 
@@ -75,7 +75,7 @@ class VerificationGateTests(unittest.TestCase):
         from scripts.package_assurance import stage
         from tempfile import TemporaryDirectory
         with TemporaryDirectory() as temporary:
-            package = stage(Path(temporary))
+            package = stage(Path(temporary) / "agent-code")
             self.assertTrue((package / "main.py").is_file())
             self.assertTrue((package / "agent/assurance_host.py").is_file())
             self.assertFalse(any(path.name == ".env" or path.suffix in {".pyd", ".dll"} for path in package.rglob("*")))
@@ -145,12 +145,19 @@ class Queue:
         self.results.append(message.parts[0].root.data)
 
 
+REQUEST_IDS = {}
+
+
 def invocation(request_id, context_id="context", metadata=None):
+    request_id = REQUEST_IDS.setdefault(request_id, new_request_id())
     return RequestContext(request=MessageSendParams(message=Message(role=Role.user, message_id=request_id,
         context_id=context_id, parts=[Part(root=TextPart(text="Synthetic review"))]), metadata=metadata or {}))
 
 
 class LifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        REQUEST_IDS.clear()
+
     async def test_same_context_id_without_reuse_acknowledgement_is_not_continuity(self):
         class Remote:
             async def send(self, question, context_id=None, **kwargs):
