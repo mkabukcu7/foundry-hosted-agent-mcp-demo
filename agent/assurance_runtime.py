@@ -18,6 +18,7 @@ from agent.assurance_protocol import A2ACardResolver, A2AClient, Message, Messag
 from azure.identity import DefaultAzureCredential
 
 from agent.assurance_artifacts import ArtifactRejected, read_document, reference
+from agent.assurance_telemetry import configure_metadata_export, export_metadata
 
 
 TRACE = ContextVar("assurance_trace", default=None)
@@ -43,6 +44,7 @@ def configure_privacy():
         os.environ[name] = "false"
     disable_instrumentation()
     logging.disable(logging.CRITICAL)
+    configure_metadata_export()
 
 
 def session_tag(value):
@@ -59,22 +61,43 @@ def metadata_span(role, session_id, reused=False, incoming=None, artifact_ref=No
     current = {"trace_id": parent.get("trace_id", uuid4().hex), "span_id": uuid4().hex[:16]}
     token = TRACE.set(current)
     started = time.monotonic()
+    started_ns = time.time_ns()
     success = False
+    failure = {}
     try:
         yield current
-        success = True
+        success = current.get("http_status_code", 200) < 400 and "error_type" not in current
+    except BaseException as error:
+        chain = []
+        cause = error
+        while cause is not None and len(chain) < 6:
+            chain.append(type(cause).__name__)
+            cause = cause.__cause__ or cause.__context__
+        failure = {"error_type": type(error).__name__, "error_chain": ",".join(chain)}
+        raise
     finally:
         TRACE.reset(token)
         if os.getenv("CONTRACT_ASSURANCE_TRACE") == "1":
-            print(json.dumps({
+            event = {
                 "event": "assurance.call", "role": role,
                 "trace_id": current["trace_id"], "span_id": current["span_id"],
                 "parent_span_id": parent.get("span_id"),
                 "session_tag": session_tag(session_id), "session_reused": reused if success else False,
                 "duration_ms": round((time.monotonic() - started) * 1000), "success": success,
                 "status": "completed" if success else "failed",
+                **failure,
+                **({"error_type": current["error_type"]} if "error_type" in current else {}),
+                **({"http_status_code": current["http_status_code"]} if "http_status_code" in current else {}),
                 **({"artifact_ref": artifact_ref} if artifact_ref else {}),
-            }), file=sys.stderr, flush=True)
+            }
+            print(json.dumps(event), file=sys.stderr, flush=True)
+            export_metadata(event, started_ns, time.time_ns())
+
+
+async def capture_http_status(response):
+    current = TRACE.get()
+    if current is not None:
+        current["http_status_code"] = response.status_code
 
 
 def local_mode():
@@ -118,34 +141,40 @@ class A2ARemote:
         validate_endpoint(url)
         self.url = url
 
-    async def send(self, question, context_id=None, reset=False, *, request_id=None, action="query", artifact=None,
-                   scope=None, abandon_request=None):
-        headers = await auth_headers(self.url)
-        async with httpx.AsyncClient(headers=headers, params=api_version_params(self.url), timeout=120, follow_redirects=False) as http_client:
-            card = await A2ACardResolver(http_client, self.url).get_agent_card()
-            if card.protocol_version != "1.0.0" or card.preferred_transport != "JSONRPC":
-                raise RuntimeError("Specialist must advertise A2A 1.0 JSONRPC.")
-            if card.url.rstrip("/") != self.url.rstrip("/"):
-                raise RuntimeError("Agent card URL differs from the configured trusted specialist URL.")
+    async def _exchange(self, request):
+        with metadata_span("a2a.token", "outbound-credential"):
+            headers = await auth_headers(self.url)
+        async with httpx.AsyncClient(headers=headers, params=api_version_params(self.url), timeout=120,
+                                     follow_redirects=False, event_hooks={"response": [capture_http_status]}) as http_client:
+            with metadata_span("a2a.card", "trusted-specialist-card"):
+                card = await A2ACardResolver(http_client, self.url).get_agent_card()
+                if card.protocol_version != "1.0.0" or card.preferred_transport != "JSONRPC":
+                    raise RuntimeError("Specialist must advertise A2A 1.0 JSONRPC.")
+                if card.url.rstrip("/") != self.url.rstrip("/"):
+                    raise RuntimeError("Agent card URL differs from the configured trusted specialist URL.")
             client = A2AClient(http_client, agent_card=card)
-            operation_id = request_id or uuid4().hex
-            parts = [Part(root=TextPart(text=question))]
-            if artifact is not None:
-                parts.extend(Part.model_validate(part) for part in artifact["parts"])
-            request = SendMessageRequest(id=operation_id, params=MessageSendParams(
-                message=Message(role=Role.user, message_id=operation_id, context_id=context_id,
-                                parts=parts),
-                metadata={"assurance_reset": reset, "assurance_resume": context_id is not None,
-                          "assurance_trace": TRACE.get(), "assurance_action": action,
-                          "assurance_scope": scope, "assurance_abandon_request": abandon_request,
-                          "assurance_artifact": ({"artifactId": artifact["artifactId"],
-                                                   "metadata": artifact["metadata"]} if artifact else None)},
-            ))
-            response = await client.send_message(request)
+            with metadata_span("a2a.send", "specialist-message"):
+                response = await client.send_message(request)
         envelope = response.root
         if hasattr(envelope, "error"):
             raise RuntimeError("Specialist returned an A2A error; no comparison was inferred.")
-        message = envelope.result
+        return envelope.result
+
+    async def send(self, question, context_id=None, reset=False, *, request_id=None, action="query", artifact=None,
+                   scope=None, abandon_request=None):
+        operation_id = request_id or uuid4().hex
+        parts = [Part(root=TextPart(text=question))]
+        if artifact is not None:
+            parts.extend(Part.model_validate(part) for part in artifact["parts"])
+        request = SendMessageRequest(id=operation_id, params=MessageSendParams(
+            message=Message(role=Role.user, message_id=operation_id, context_id=context_id, parts=parts),
+            metadata={"assurance_reset": reset, "assurance_resume": context_id is not None,
+                      "assurance_trace": TRACE.get(), "assurance_action": action,
+                      "assurance_scope": scope, "assurance_abandon_request": abandon_request,
+                      "assurance_artifact": ({"artifactId": artifact["artifactId"],
+                                               "metadata": artifact["metadata"]} if artifact else None)},
+        ))
+        message = await self._exchange(request)
         if not isinstance(message, Message) or not message.context_id:
             raise RuntimeError("Expected a completed specialist Message with contextId.")
         data = [part.root.data for part in message.parts if part.root.kind == "data"]
@@ -162,6 +191,48 @@ class A2ARemote:
         if result.get("artifact_manifest"):
             result["artifact"] = {**result.pop("artifact_manifest"), "parts": file_parts}
         return message.context_id, result
+
+
+class ResponsesRemote(A2ARemote):
+    """Carry the existing structured specialist contract over hosted Responses."""
+
+    def __init__(self, url):
+        super().__init__(url)
+        if urlsplit(url).hostname.endswith(".services.ai.azure.com") and not url.rstrip("/").endswith("/protocols/openai"):
+            raise ValueError("Hosted specialist URLs must use the Responses /protocols/openai base.")
+        self.continuations = {}
+
+    async def _exchange(self, request):
+        message = request.params.message
+        metadata = request.params.metadata or {}
+        abandoned = metadata.get("assurance_abandon_request") if metadata.get("assurance_reset") else None
+        message.context_id = message.context_id or abandoned or message.message_id
+        context_id = message.context_id
+        with metadata_span("responses.token", "outbound-credential"):
+            headers = await auth_headers(self.url)
+        if authorization := headers.get("Authorization"):
+            headers["x-client-assurance-authorization"] = authorization
+        payload = {"input": request.model_dump_json(by_alias=True, exclude_none=True),
+                   "store": True, "stream": False}
+        if previous := self.continuations.get(context_id):
+            payload["previous_response_id"] = previous
+        async with httpx.AsyncClient(headers=headers, params=api_version_params(self.url), timeout=180,
+                                     follow_redirects=False, event_hooks={"response": [capture_http_status]}) as client:
+            with metadata_span("responses.send", "specialist-message"):
+                response = await client.post(self.url.rstrip("/") + "/responses", json=payload)
+                response.raise_for_status()
+                body = response.json()
+                if body.get("status") != "completed" or not isinstance(body.get("id"), str) or not body["id"]:
+                    raise RuntimeError("Specialist Responses request did not complete.")
+                texts = [part["text"] for item in body.get("output", []) if item.get("type") == "message"
+                         for part in item.get("content", []) if part.get("type") == "output_text"]
+                if len(texts) != 1:
+                    raise RuntimeError("Expected one structured specialist response.")
+                result = Message.model_validate_json(texts[0])
+                if result.role != Role.agent or result.context_id != context_id:
+                    raise RuntimeError("Specialist Responses context or role differs from the requested context.")
+                self.continuations[context_id] = body["id"]
+                return result
 
 
 @dataclass

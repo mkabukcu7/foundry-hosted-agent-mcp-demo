@@ -1,46 +1,51 @@
 # Contract Assurance Requirements Audit
 
-**Historical predeployment audit:** the later user-approved deployments and
-current live verification result are in the
-[hosted deployment record](../deployment/contract-assurance/README.md), which
-supersedes the deployment/version status below. Four agents are now active;
-the complete deployed workflow remains unverified due to the documented MCP
-publishing blocker.
+**Updated after hosted acceptance, 2026-10-29:** the complete three-turn workflow
+passed at 14:55-14:58 UTC against orchestrator v8 and Contract/RFP v5. Original
+HWC v6 is unchanged. MCP publishing succeeded; authenticated specialist retrieval,
+exact generated-document read/annotation lineage, and stable reused RFP context
+are verified by actual execution receipts. Existing Application Insights contains
+94 allowlisted metadata spans, including four linked successful business trace
+trees. All 39 focused regression/transport/privacy tests pass.
 
-Current branch: `feature/contract-assurance`. Changes extend the existing feature;
-the HWC deployment manifest, Fabric data path, both MCP transports, and approval
-controls are preserved. No production data, deployments, new Azure resources,
-permission changes, or new approval workflow were used.
+The [hosted deployment record](../deployment/contract-assurance/README.md)
+records explicit deployment/network/permission approvals, earlier publishing and
+discovery failures, confirmed hosted A2A rejection, and the approved Responses
+migration. No new resources, permissions, identities, models, MCP callers, or
+features were added by that migration. The HWC manifest, Fabric data path, both
+MCP transports, and approval controls remain preserved.
 
 ## Coverage
 
 | Requirement | Status | Supporting implementation and evidence |
 | --- | --- | --- |
-| Separately hosted Foundry agents communicate | **BLOCKED / UNVERIFIED live** | Three distinct `kind: hosted` service definitions in [deployment manifest](../deployment/contract-assurance/azure.yaml), role-isolated [entrypoint](../agent/assurance_host.py), and source-allowlisted container. Definition schema and source paths validated; image build, platform ingress, and deployed calls NOT RUN. |
-| Preserve specialist context per parent/user | **IMPLEMENTED; OFFLINE TESTED** | [Session registry](../agent/assurance_runtime.py) scopes by trusted caller, parent, specialist. [Specialist server](../agent/contract_specialist.py) retains its own AgentSession. Expiry/restart fails closed, request replay is idempotent, model failure rolls back history, reset requires acknowledgements and is owner-scoped. Hosted sandbox continuity remains UNVERIFIED. |
-| Pass generated documents between agents | **IMPLEMENTED; MOCK-ONLY integration evidence** | [Artifact boundary](../agent/assurance_artifacts.py) and A2A FilePart transport send complete bytes from Contract Analyst via orchestrator to RFP Analyst, which receives the full JSON in its model input, annotates against MCP evidence, and acknowledges the exact ID/version/hash. The SDK round-trip uses explicitly fake analysts. No deployed/model-backed handoff has been demonstrated in this audit. |
-| Complete real-client scenario and safe traces | **IMPLEMENTED verifier; LIVE NOT RUN** | [Real client](../frontend/assurance_client.py) reads actual Responses function-call outputs, not model assertions. [Verifier](../scripts/verify_contract_assurance.py) checks actual hosted definitions, three distinct observed endpoints, gap/residency receipts, document lineage/read receipt, and stable reused RFP context. [UI](../frontend/contract-assurance.html) renders execution receipts. |
+| Separately hosted Foundry agents communicate | **HOSTED VERIFIED** | Three distinct `kind: hosted` services in [deployment manifest](../deployment/contract-assurance/azure.yaml); v8/v5/v5 completed real Responses calls with signed caller validation and MCP retrieval. |
+| Preserve specialist context per parent/user | **HOSTED REUSE VERIFIED; OFFLINE ISOLATION TESTED** | [Session registry](../agent/assurance_runtime.py) scopes by trusted caller, parent, specialist. [Specialist server](../agent/contract_specialist.py) retains its AgentSession. Both hosted specialist tags stayed stable; follow-ups reported actual reuse. Restart/replica durability and authenticated multi-user frontend remain outside this run. |
+| Pass generated documents between agents | **HOSTED VERIFIED** | [Artifact boundary](../agent/assurance_artifacts.py) sends complete inline file bytes in structured Responses input. The RFP read receipt matches the findings ID/version/hash; annotation version 2 references those exact version-1 bytes. |
+| Complete real-client scenario and safe traces | **HOSTED VERIFIED** | [Real client](../frontend/assurance_client.py) and [verifier](../scripts/verify_contract_assurance.py) passed all three turns using execution receipts, all eight citations, lineage, and stable RFP reuse. Existing Insights verifies linked comparison/handoff, specialist, and retrieval spans without content export. |
 | Explain private Copilot Studio access | **DOCUMENTED; TENANT UNVERIFIED** | [Private connectivity note](copilot-studio-private-connectivity.md) distinguishes Activity-native connector, A2A, and private Responses/custom-connector paths, with official prerequisites and limitations. No networking solution was deployed. |
 
 ## Real Call Path and Protocol
 
 Browser -> cookie-owned gateway -> OpenAI-compatible Responses HTTP endpoint ->
 real Agent Framework orchestrator -> `consult_specialists` or
-`generate_and_validate_findings` -> `A2ARemote` -> discovered specialist card ->
-official SDK JSON-RPC `message/send` -> separate specialist service ->
+`generate_and_validate_findings` -> `ResponsesRemote` -> authenticated specialist
+Responses endpoint -> existing specialist executor in a separate hosted service ->
 allowlisted Streamable HTTP MCP retrieval -> synthetic document corpus.
 
 The orchestrator tools are local *delegation adapters*, not substitute analyst
 functions: specialist reasoning and history live in separate services. Standardized
-**A2A 0.3 JSON-RPC** is used between agents. The browser's Responses calls are not
-A2A, and MCP is retrieval rather than agent delegation. A2A file bytes use the
+**Responses** is now the explicitly approved hosted transport, replacing the
+unsupported hosted A2A route. This is not a claim of A2A interoperability.
+MCP remains retrieval rather than agent delegation. Inline file bytes use the
 standard FilePart/FileWithBytes models; document scope, hash, version, reset,
 resume, replay, and read receipts are **application conventions**, not claims of
 standardized A2A document authorization or lifecycle semantics.
 
-No alternate protocol is silently substituted when A2A is unsupported. The pinned
-client rejects incompatible cards, mismatched advertised URLs, missing structured
-results, expired context, or missing/unauthorized document bytes.
+No alternate protocol is silently substituted. The Responses client rejects
+hosted A2A URLs, incomplete envelopes, missing structured results, changed
+context IDs, expired context, and missing/unauthorized document bytes. The local
+A2A adapter remains covered by its existing tests, not used as a fallback.
 
 ## Authentication and Hosting Boundaries
 
@@ -54,10 +59,14 @@ It also requires `CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS` containing only existin
 authorized caller object IDs; a valid tenant token alone is insufficient. Auth
 mode is fixed at startup. No role assignments are created or broadened.
 MCP retains its existing token/audience configuration; tokens refresh on connection.
+For Foundry ingress, the same signed bearer is forwarded using
+`x-client-assurance-authorization`. The boundary validates it with the existing
+verifier and removes both credential headers before the Responses host processes
+the request; tokens are never stored in Responses content or handler metadata.
 
-The independently authenticated Foundry identity, RBAC, A2A protocol registration,
-well-known card path, advertised endpoint rewriting, ingress header preservation,
-and routing to the same specialist sandbox **must be verified**. A2A contextId is
+The independently authenticated Foundry identity, RBAC, Responses registration,
+ingress header preservation,
+and specialist continuity were verified in the hosted acceptance run. Application contextId is
 not treated as proof of platform session retention. If state is missing, the
 application now reports `context_expired` and requires explicit reset rather than
 recreating memory and claiming reuse. The in-memory stores are not durable or
@@ -69,7 +78,7 @@ by the local browser gateway.
 The Contract Analyst creates a synthetic JSON findings document from returned MCP
 clauses plus its generated narrative. It is an inline file, not just a summary.
 The orchestrator retains those exact bytes and passes them in an authenticated
-A2A message to the RFP Analyst. The receiver verifies scope, hash, size, version,
+Responses payload to the RFP Analyst. The receiver verifies scope, hash, size, version,
 and latest-known version before passing the complete decoded document to its model.
 Its annotation preserves artifact ID, increments version, records the parent
 ID/version/hash, retains the original findings, and adds cited RFP comparisons.
@@ -89,7 +98,7 @@ Caches and history are process-local and expire; restart/expiry requires reset.
 
 - Installed APIs inspected: Agent Framework core **1.15.0**, Foundry **1.11.0**,
   hosting **1.0.0b260821**, agentserver-core **2.1.0**, Responses **2.2.0b1**,
-  official a2a-sdk **0.3.22**, OpenAI **2.54.0**. Public AgentSession snapshot APIs,
+  official a2a-sdk **1.2.3**, OpenAI **2.54.0**. Public AgentSession snapshot APIs,
   file models, agent version lookup, request-context headers, and hosting tool
   output serialization were checked. The SDK's deprecated A2AClient warning is
   retained as a version constraint, not hidden by upgrading the original runtime.
@@ -98,6 +107,10 @@ Caches and history are process-local and expire; restart/expiry requires reset.
   gaps, matching EU residency, citations, transport parity, ownership, concurrent
   contexts, expired/lost contexts, failed/retried calls, replay, partial reset,
   document bytes/lineage, missing/stale/unauthorized artifacts, and receipt gating.
+- The initial predeployment audit below predates the successful v8/v5/v5 run.
+  Current [Responses transport tests](../tests/test_assurance_responses.py),
+  handoff, regression and telemetry tests total 39 passing cases. Hosted
+  acceptance separately verifies live execution; the offline tests are not its proof.
 - New hosted service definitions passed the current official agent JSON schema
   and source-path validation. This is not a container build or hosted deployment.
 - Live preflight was run without `--live`; it returned **NOT RUN**. Only a loopback
@@ -108,17 +121,14 @@ Caches and history are process-local and expire; restart/expiry requires reset.
   artifact/lifecycle changes. They are **not** proof of the complete revised demo
   or separately hosted Foundry communication.
 
-## Remaining Prerequisites
+## Remaining Boundaries
 
-1. Supply three already-deployed, authorized Foundry hosted agent names/versions
-   and their observed protocol endpoints. Do not infer URLs from a flag.
-2. Verify A2A 0.3 is enabled on specialist versions and that the card, ingress
-   authentication, platform headers and sandbox routing match the adapter.
-3. Verify existing invocation/MCP permissions, private DNS/routing, and an
-   authenticated end-user frontend/session boundary. No permission grants occur here.
-4. In that authorized environment run the documented verifier with `--live` and
-   retain linked metadata-only spans plus execution receipts. Model text or
-   passing mock tests cannot satisfy these gates.
+1. Session/history stores are in-memory and single-process, not durable or shared
+   across replicas. Lost state fails closed and requires explicit reset.
+2. The loopback frontend is not an authenticated multi-user/OBO gateway.
+3. Private Copilot Studio tenant connectivity remains documented, not deployed
+   or verified. The hosted Responses run does not establish that integration.
+4. No new feature or evaluation suite was requested or added.
 
 ## Official References
 

@@ -9,6 +9,8 @@ services:
         uses:
             - foundry-project
         env:
+            APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING}
+            CONTRACT_ASSURANCE_APPINSIGHTS: "1"
             AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
             CONTRACT_ANALYST_URL: ${CONTRACT_ANALYST_URL}
             CONTRACT_ASSURANCE_LOCAL: "0"
@@ -36,11 +38,12 @@ services:
         uses:
             - foundry-project
         env:
+            APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING}
+            CONTRACT_ASSURANCE_APPINSIGHTS: "1"
             AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
             CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS: ${CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS}
             CONTRACT_ASSURANCE_AUDIENCE: ${CONTRACT_ASSURANCE_AUDIENCE}
             CONTRACT_ASSURANCE_LOCAL: "0"
-            CONTRACT_ASSURANCE_PUBLIC_URL: ${CONTRACT_ANALYST_URL}
             CONTRACT_ASSURANCE_ROLE: contract
             CONTRACT_ASSURANCE_TENANT_ID: ${CONTRACT_ASSURANCE_TENANT_ID}
             CONTRACT_ASSURANCE_TRACE: ${CONTRACT_ASSURANCE_TRACE}
@@ -56,9 +59,8 @@ services:
                 memory: 1Gi
         kind: hosted
         name: contract-analyst
-        protocols: [{protocol: a2a, version: 1.0.0}]
-        agentEndpoint: {protocols: [responses, a2a]}
-        agentCard: {version: 1.0.0, description: Read-only fictional Northstar contract evidence and synthetic findings., skills: [{id: contract-evidence, name: Contract evidence, description: Retrieve scoped contract evidence and generate synthetic findings., tags: [contract, read-only]}]}
+        protocols: [{protocol: responses, version: 2.0.0}]
+        agentEndpoint: {protocols: [responses]}
     foundry-project:
         host: azure.ai.project
         endpoint: ${AZURE_AI_PROJECT_ENDPOINT}
@@ -69,11 +71,12 @@ services:
         uses:
             - foundry-project
         env:
+            APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING}
+            CONTRACT_ASSURANCE_APPINSIGHTS: "1"
             AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
             CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS: ${CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS}
             CONTRACT_ASSURANCE_AUDIENCE: ${CONTRACT_ASSURANCE_AUDIENCE}
             CONTRACT_ASSURANCE_LOCAL: "0"
-            CONTRACT_ASSURANCE_PUBLIC_URL: ${RFP_ANALYST_URL}
             CONTRACT_ASSURANCE_ROLE: rfp
             CONTRACT_ASSURANCE_TENANT_ID: ${CONTRACT_ASSURANCE_TENANT_ID}
             CONTRACT_ASSURANCE_TRACE: ${CONTRACT_ASSURANCE_TRACE}
@@ -89,8 +92,7 @@ services:
                 memory: 1Gi
         kind: hosted
         name: rfp-analyst
-        protocols: [{protocol: a2a, version: 1.0.0}]
-        agentEndpoint: {protocols: [responses, a2a]}
-        agentCard: {version: 1.0.0, description: Read-only fictional Northstar RFP commitments and findings annotations., skills: [{id: rfp-evidence, name: RFP evidence, description: Retrieve scoped RFP commitments and annotate synthetic findings., tags: [rfp, read-only]}]}
+        protocols: [{protocol: responses, version: 2.0.0}]
+        agentEndpoint: {protocols: [responses]}
 infra:
     provider: microsoft.foundry

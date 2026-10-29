@@ -17,8 +17,8 @@ from frontend.assurance_client import AssuranceGateway
 
 def configured_hosted_agents(environment):
     roles = (("orchestrator", "CONTRACT_ORCHESTRATOR_BASE_URL", "CONTRACT_ORCHESTRATOR_AGENT_NAME", "responses"),
-             ("contract", "CONTRACT_ANALYST_URL", "CONTRACT_ANALYST_AGENT_NAME", "a2a"),
-             ("rfp", "RFP_ANALYST_URL", "RFP_ANALYST_AGENT_NAME", "a2a"))
+             ("contract", "CONTRACT_ANALYST_URL", "CONTRACT_ANALYST_AGENT_NAME", "responses"),
+             ("rfp", "RFP_ANALYST_URL", "RFP_ANALYST_AGENT_NAME", "responses"))
     project = environment.get("FOUNDRY_PROJECT_ENDPOINT", "").rstrip("/")
     configured = []
     if not project.startswith("https://"):
@@ -29,7 +29,7 @@ def configured_hosted_agents(environment):
         url = environment.get(url_name, "").rstrip("/")
         parsed = urlsplit(url)
         base = f"{project}/agents/{name}/endpoint/protocols/"
-        suffix = "openai" if protocol == "responses" else "a2a"
+        suffix = "openai"
         if not name or not version or url != base + suffix or parsed.scheme != "https" or parsed.query or parsed.fragment:
             return [], [f"{role}: provide the observed Foundry endpoint, distinct agent name, and version; loopback is not hosted proof."]
         configured.append((role, name, version, protocol))

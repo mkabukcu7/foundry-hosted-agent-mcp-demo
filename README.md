@@ -167,21 +167,34 @@ appending to `action_approvals`; it never updates the SQL analytics endpoint.
 ## Vendor Contract Assurance
 
 **Current hosted status:** all four agent roles are registered and active in
-Foundry: original HWC v6, assurance orchestrator v3, and Contract/RFP analysts
-v2. Specialist A2A 1.0 endpoint discovery is verified, but the live comparison
-still has no execution receipts. See the
-[deployment record](deployment/contract-assurance/README.md) for observed endpoints,
-explicit approvals, native A2A 1.0 migration, and verification limits. The live
-comparison was attempted but **did not pass execution verification**. Publishing
-the required MCP retrieval-tool update is blocked by deployment-storage HTTP 403;
-no network controls were weakened. Hosted status is not a claim that the complete
-document/session workflow passed. [Requirements audit](docs/contract-assurance-audit.md)
-records the earlier predeployment review.
+Foundry: original HWC v6, assurance orchestrator v8, and Contract/RFP analysts
+v5. All three acceptance turns have verified execution receipts. On
+2026-10-29 at 14:55-14:58 UTC, the complete hosted conversation passed using
+Responses 2.0. Original HWC v6 is unchanged.
+MCP publishing succeeded at 13:04 UTC; all six triggers are indexed
+and both specialists performed authenticated retrieval.
+
+The verifier checked three discrepancies, matching EU residency, all eight
+citations, exact generated-document read/annotation lineage, and reused RFP
+context on the service-credit follow-up. Existing Application Insights contains
+94 metadata-only spans, including four linked comparison/handoff trace trees,
+eight successful specialist authorizations and eight successful MCP retrievals.
+No prompts, document bytes, bearer tokens, or model completions were exported
+by the manual trace path.
+
+Earlier discovery failures were resolved with the separately approved
+project-scoped invocation grant. Hosted A2A execution was unsupported; the
+user-approved Responses migration preserves the specialist executor, model,
+caller validation, MCP allowlist, and document contract. Foundry ingress
+credential forwarding was corrected without weakening JWT checks or networking.
+See the [deployment record](deployment/contract-assurance/README.md) for approvals,
+endpoints, trace IDs, and verification limits, and the
+[requirements audit](docs/contract-assurance-audit.md) for coverage.
 See [private Copilot Studio connectivity](docs/copilot-studio-private-connectivity.md)
 for the Activity requirement, A2A/custom connector alternatives, and firewall limits.
 
 This separate, **read-only** demo uses three real model-backed services:
-a Responses-hosted orchestrator delegates over **A2A 1.0 JSON-RPC HTTP** to a
+a Responses-hosted orchestrator delegates over **Responses 2.0 HTTP** to a
 Contract Analyst and an RFP Analyst. Each specialist has its own Agent Framework
 session and one allowlisted MCP retrieval tool. The existing HWC demo, Fabric
 configuration, authentication, and approval workflow are unchanged. The new page
@@ -217,7 +230,7 @@ agent\.venv\Scripts\python.exe scripts\start_contract_assurance.py
 ```
 
 Open `http://127.0.0.1:5173/contract-assurance.html`. The launcher starts a native
-MCP server if port 8001 is free, A2A specialists on 8091/8092, the real Responses
+MCP server if port 8001 is free, Responses specialists on 8091/8092, the real Responses
 orchestrator on 8090, and the frontend on 5173. Existing MCP/frontend processes
 are retained; an existing MCP must be restarted to discover the two new tools.
 An existing frontend must be restarted with `CONTRACT_ASSURANCE_LOCAL=1` and
@@ -243,13 +256,15 @@ specialists, then discards the parent continuation. A new review starts fresh.
 
 The revised UI shows execution-derived session tags, reuse, document versions,
 and read/annotation receipts. A model's assertion of success without a tool receipt
-is shown as unverified. Findings are actual inline A2A file bytes with a preserved
+is shown as unverified. Findings are actual inline file bytes in the structured
+specialist Responses payload, with a preserved
 artifact ID, incrementing annotation version, parent digest, and source citations.
 
 The CLI checks **hosted** integration only. First configure the observed Foundry
 endpoints, three distinct agent names and deployed versions in the `.env.example`
-fields; the orchestrator base ends with `/protocols/openai/` and specialist URLs
-are their observed A2A protocol endpoints. Existing permissions and private
+fields; all three base URLs end with `/protocols/openai/`. Specialist definitions
+must declare Responses 2.0 before running the updated verifier; old A2A-only
+versions do not qualify. Existing permissions and private
 connectivity must already be authorized. Then, only in that environment:
 
 ```powershell
@@ -263,7 +278,7 @@ and checks term/citation results, execution-derived gap/residency counts,
 document read/version receipts and the same reused RFP context tag. It reports
 safe receipts only, not conversation content. Offline
 tests use fake analysts and an in-process SDK transport; they are **not proof of
-live A2A**. Model-backed local verification is also not verification of deployed
+live hosted execution**. Model-backed local verification is also not verification of deployed
 Foundry endpoints, managed identities, platform routing, or hosted persistence.
 
 For F5 debugging, run the launcher with `--without-orchestrator`, then select
@@ -273,11 +288,15 @@ available. Use the assurance page for the three-service live path.
 ### Sessions, Authentication, and Traces
 
 Specialist continuation is keyed by trusted caller, parent `AgentSession`, and
-specialist. The A2A server retains its own session keyed by authenticated
-principal and protocol `contextId`. Calls to the same specialist session are
+specialist. The specialist executor retains its own session keyed by authenticated
+principal and application `contextId`. Calls to the same specialist session are
 serialized; different callers/parents/specialists do not share context.
 The parent Responses host resumes through `previous_response_id`; the remote
-specialists resume through A2A `contextId`, not replayed local function calls.
+specialists use server-owned `previous_response_id` continuations for Responses
+routing and carry their application `contextId` in the structured request.
+The Responses adapter invokes the existing executor directly, not another model
+to reinterpret commands or fabricate receipts. Each input is processed once;
+previous transcripts are not replayed into the executor.
 Storage is in memory and single-process; restarts lose context and now require an
 explicit reset. Unknown/expired state is never silently recreated as reused.
 Logical request IDs deduplicate successful retries; failed calls roll back history,
@@ -293,8 +312,14 @@ against `CONTRACT_ASSURANCE_TENANT_ID` and `CONTRACT_ASSURANCE_AUDIENCE`, includ
 issuer, tenant, audience, and expiry. The orchestrator requires the trusted user
 identity supplied by Foundry; caller IDs from prompts are never accepted.
 Directly exposing the container with spoofable platform headers is not supported.
+Foundry consumes the gateway Authorization header, so the client also sends the
+same signed bearer in `x-client-assurance-authorization`, using the SDK's
+`x-client-` pass-through contract. The specialist validates that credential with
+the existing JWT verifier and caller allowlist, then removes both credential
+headers before the Responses host sees the request. Credentials are never placed
+in stored Responses input, metadata, or application telemetry.
 The existing MCP token/audience configuration is reused, with refreshed tokens
-on MCP connections. Hosted ingress, identity permissions, and A2A protocol
+on MCP connections. Hosted ingress, identity permissions, and Responses protocol
 registration must be verified before an approved deployment; none are changed here.
 
 Tracing is off by default. With `CONTRACT_ASSURANCE_TRACE=1`, stderr contains
@@ -316,11 +341,12 @@ it remembered a conversation.
 
 The opt-in dependency file pins the locally checked versions: Agent Framework
 core 1.15.0, Foundry 1.11.0, hosting 1.0.0b260821, OpenAI 2.54.0, and official
-`a2a-sdk` 1.2.3. The newest Agent Framework A2A adapter would upgrade core;
-instead this extension uses official native A2A 1.0 JSON-RPC transport/routes and
-SDK conversion helpers behind the existing analyst implementation. The actual
-Foundry service rejected 0.3 and required 1.0; this is a real wire migration, not
-a version-label change. See [the deployment record](deployment/contract-assurance/README.md).
+`a2a-sdk` 1.2.3. Hosted specialists now use the installed
+`ResponsesAgentServerHost` and `TextResponse` APIs. The A2A SDK remains for
+internal typed message/file models and the separately tested local A2A adapter;
+it is not the hosted wire protocol. Foundry card discovery can succeed while
+its A2A gateway rejects hosted invocation. See
+[the deployment record](deployment/contract-assurance/README.md).
 
 References checked against installed signatures and implementation:
 [Foundry hosted protocols/authentication](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/concepts/hosted-agents),
@@ -329,6 +355,16 @@ References checked against installed signatures and implementation:
 [A2A 0.3 specification](https://a2a-protocol.org/v0.3.0/specification/).
 
 ### Verification Record
+
+**Hosted, 2026-10-29:** all three unchanged acceptance turns passed against
+orchestrator v8 / Contract v5 / RFP v5. Actual execution receipts verify the
+comparison, exact document lineage/read receipt, and stable reused RFP session.
+Application Insights confirms four linked business trace trees through delegates,
+specialists, MCP retrieval, and artifact handoff. All 39 focused regression,
+transport, and privacy tests pass. See the
+[deployment record](deployment/contract-assurance/README.md) for trace IDs.
+This verifies the tested hosted conversation, not durable state across restarts
+or an authenticated multi-user frontend.
 
 **Historical, before the document-handoff audit changes:** verified locally on
 2026-10-28 with the existing Foundry model: all three live

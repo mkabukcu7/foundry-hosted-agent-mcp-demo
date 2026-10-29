@@ -1,4 +1,4 @@
-"""Real Responses-hosted orchestrator; specialists are invoked over A2A HTTP."""
+"""Responses-hosted orchestrator and separately hosted specialist calls."""
 
 import asyncio
 import os
@@ -10,7 +10,7 @@ from agent_framework_foundry_hosting import ResponsesHostServer
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
 
-from agent.assurance_runtime import A2ARemote, SpecialistSessions, configure_privacy, metadata_span, trusted_parent
+from agent.assurance_runtime import ResponsesRemote, SpecialistSessions, configure_privacy, metadata_span, trusted_parent
 from shared.contract_assurance import compare_evidence
 
 
@@ -86,8 +86,8 @@ async def main():
     load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     configure_privacy()
     sessions = SpecialistSessions({
-        "contract": A2ARemote(os.environ["CONTRACT_ANALYST_URL"]),
-        "rfp": A2ARemote(os.environ["RFP_ANALYST_URL"]),
+        "contract": ResponsesRemote(os.environ["CONTRACT_ANALYST_URL"]),
+        "rfp": ResponsesRemote(os.environ["RFP_ANALYST_URL"]),
     })
     with DefaultAzureCredential() as credential:
         client = FoundryChatClient(project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],

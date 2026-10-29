@@ -1,9 +1,8 @@
-"""Model-backed Contract/RFP specialist exposed by the official A2A server SDK."""
+"""Model-backed specialists with hosted Responses and local A2A adapters."""
 
 import asyncio
 import ast
 from copy import deepcopy
-from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 import json
@@ -17,7 +16,7 @@ from uuid import uuid4
 import httpx
 from agent.assurance_protocol import AgentExecutor, A2AStarletteApplication, DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
-from agent.assurance_protocol import AgentCapabilities, AgentCard, AgentSkill, DataPart, Message, Part, Role, TaskNotCancelableError
+from agent.assurance_protocol import AgentCapabilities, AgentCard, AgentSkill, DataPart, Message, Part, RequestContext, Role, SendMessageRequest, TaskNotCancelableError
 from agent_framework import Agent, AgentSession, MCPStreamableHTTPTool
 from agent_framework.foundry import FoundryChatClient
 from azure.identity import DefaultAzureCredential
@@ -50,7 +49,9 @@ def capture_evidence(result):
     collected = RETRIEVED.get()
     if not result.isError and isinstance(value, list) and collected is not None:
         collected.extend(value)
-    with metadata_span("mcp.retrieve", "read-only-document-retrieval"):
+    with metadata_span("mcp.retrieve", "read-only-document-retrieval") as span:
+        if result.isError:
+            span["error_type"] = "MCPToolError"
         return json.dumps(value)
 
 
@@ -240,16 +241,22 @@ class CallerBoundary:
             principal = "loopback-demo"
         else:
             headers = dict(scope.get("headers", []))
-            authorization = headers.get(b"authorization", b"").decode("ascii", errors="ignore")
+            # Foundry consumes Authorization; x-client-* headers pass through to the container.
+            authorization = headers.get(b"authorization", headers.get(
+                b"x-client-assurance-authorization", b"")).decode("ascii", errors="ignore")
             if not authorization.startswith("Bearer "):
                 return await JSONResponse({"error": "Bearer token required."}, status_code=401,
                                           headers={"WWW-Authenticate": "Bearer"})(scope, receive, send)
             try:
-                principal = await asyncio.to_thread(self.verify, authorization[7:])
+                with metadata_span("specialist.authorize", "inbound-credential"):
+                    principal = await asyncio.to_thread(self.verify, authorization[7:])
             except Exception:
                 return await JSONResponse({"error": "Invalid bearer token."}, status_code=401)(scope, receive, send)
         token = PRINCIPAL.set(principal)
         try:
+            scope = {**scope, "headers": [
+                (name, value) for name, value in scope.get("headers", [])
+                if name.lower() not in {b"authorization", b"x-client-assurance-authorization"}]}
             await self.app(scope, receive, send)
         finally:
             PRINCIPAL.reset(token)
@@ -275,6 +282,36 @@ def create_app(agent, document_set, url, lifespan=None):
     return CallerBoundary(app)
 
 
+def create_responses_app(agent, document_set):
+    from azure.ai.agentserver.responses import ResponsesAgentServerHost, TextResponse
+
+    executor = SpecialistExecutor(agent, document_set)
+    app = ResponsesAgentServerHost(configure_observability=None)
+
+    @app.response_handler
+    async def respond(request, context, cancellation_signal):
+        if request.get("previous_response_id") and not request.get("store", True):
+            raise ValueError("Specialist continuation requires stored Responses state.")
+        invocation = SendMessageRequest.model_validate_json(
+            await context.get_input_text(resolve_references=False))
+        if invocation.params.message.role != Role.user or not invocation.params.message.context_id:
+            raise ValueError("Specialist requests require a user message and explicit context.")
+        if cancellation_signal.is_set():
+            raise asyncio.CancelledError
+        messages = []
+
+        class Queue:
+            async def enqueue_event(self, message):
+                messages.append(message)
+
+        await executor.execute(RequestContext(request=invocation.params), Queue())
+        if len(messages) != 1:
+            raise RuntimeError("Specialist execution must produce exactly one structured response.")
+        return TextResponse(context, request, text=messages[0].model_dump_json(by_alias=True, exclude_none=True))
+
+    return CallerBoundary(app)
+
+
 async def main():
     import uvicorn
 
@@ -283,20 +320,26 @@ async def main():
     document_set = os.environ["CONTRACT_ASSURANCE_ROLE"]
     name, tool_name = ROLES[document_set]
     port = int(os.getenv("PORT", "8091" if document_set == "contract" else "8092"))
-    url = os.getenv("CONTRACT_ASSURANCE_PUBLIC_URL", f"http://127.0.0.1:{port}/")
     if not local_mode():
         from agent.assurance_runtime import validate_endpoint
-        validate_endpoint(url)
         validate_endpoint(os.environ["MCP_SERVER_URL"])
     credential = DefaultAzureCredential()
 
     def mcp_headers(_):
-        if audience := os.getenv("MCP_AUDIENCE"):
-            return {"Authorization": f"Bearer {credential.get_token(f'{audience}/.default').token}"}
-        token = os.getenv("MCP_AUTH_TOKEN")
-        return {"Authorization": f"Bearer {token}"} if token else {}
+        with metadata_span("mcp.token", "outbound-mcp-credential"):
+            if audience := os.getenv("MCP_AUDIENCE"):
+                return {"Authorization": f"Bearer {credential.get_token(f'{audience}/.default').token}"}
+            token = os.getenv("MCP_AUTH_TOKEN")
+            return {"Authorization": f"Bearer {token}"} if token else {}
 
-    async with httpx.AsyncClient(timeout=30) as http_client:
+    class MetadataTransport(httpx.AsyncHTTPTransport):
+        async def handle_async_request(self, request):
+            with metadata_span("mcp.http", "read-only-mcp") as span:
+                response = await super().handle_async_request(request)
+                span["http_status_code"] = response.status_code
+                return response
+
+    async with httpx.AsyncClient(timeout=30, transport=MetadataTransport()) as http_client:
         mcp = MCPStreamableHTTPTool(name=f"{document_set}-read-only", url=os.environ["MCP_SERVER_URL"],
                                     allowed_tools=[tool_name], load_prompts=False, header_provider=mcp_headers,
                                     parse_tool_results=capture_evidence, http_client=http_client)
@@ -320,16 +363,12 @@ Remain read-only; never propose tool calls that change records or approvals."""
         agent = Agent(client=client, name=name, instructions=instructions, tools=mcp,
                       default_options={"store": False, "tool_choice": "required"})
 
-        @asynccontextmanager
-        async def lifespan(app):
-            async with agent:
-                yield
-
         try:
-            app = create_app(agent, document_set, url, lifespan)
-            server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1" if local_mode() else "0.0.0.0",
-                                                    port=port, access_log=False, log_level="critical"))
-            await server.serve()
+            async with agent:
+                app = create_responses_app(agent, document_set)
+                server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1" if local_mode() else "0.0.0.0",
+                                                        port=port, access_log=False, log_level="critical"))
+                await server.serve()
         finally:
             credential.close()
 

@@ -69,12 +69,9 @@ class VerificationGateTests(unittest.TestCase):
         for service in agents:
             if service["env"]["CONTRACT_ASSURANCE_ROLE"] in {"contract", "rfp"}:
                 self.assertEqual({protocol["protocol"]: protocol["version"] for protocol in service["protocols"]},
-                                 {"a2a": "1.0.0"})
-                self.assertEqual(set(service["agentEndpoint"]["protocols"]), {"responses", "a2a"})
-                self.assertEqual(service["agentCard"]["version"], "1.0.0")
-                self.assertEqual(len(service["agentCard"]["skills"]), 1)
-                self.assertTrue(service["agentCard"]["skills"][0]["description"])
-                self.assertIn("read-only", service["agentCard"]["skills"][0]["tags"])
+                                 {"responses": "2.0.0"})
+                self.assertEqual(service["agentEndpoint"]["protocols"], ["responses"])
+                self.assertNotIn("agentCard", service)
         from scripts.package_assurance import stage
         from tempfile import TemporaryDirectory
         with TemporaryDirectory() as temporary:
@@ -112,8 +109,7 @@ class VerificationGateTests(unittest.TestCase):
                                        ("rfp", "RFP_ANALYST_AGENT_NAME", "RFP_ANALYST_URL")):
             env[name_key] = role
             env[name_key + "_VERSION"] = "1"
-            protocol = "openai" if role == "orchestrator" else "a2a"
-            env[url_key] = f"{env['FOUNDRY_PROJECT_ENDPOINT']}/agents/{role}/endpoint/protocols/{protocol}"
+            env[url_key] = f"{env['FOUNDRY_PROJECT_ENDPOINT']}/agents/{role}/endpoint/protocols/openai"
         configured, errors = configured_hosted_agents(env)
         self.assertEqual(len(configured), 3)
         self.assertEqual(errors, [])
