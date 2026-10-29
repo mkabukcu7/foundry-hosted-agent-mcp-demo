@@ -89,7 +89,7 @@ Azure Functions MCP runtime image and its Python worker are x64. Running that
 image on ARM64 through Docker's amd64/QEMU emulation caused the Python worker
 to exit and left the MCP endpoint returning HTTP 503.
 
-Use the native FastMCP compatibility server on ARM64. It exposes the same four
+Use the native FastMCP compatibility server on ARM64. It exposes the same
 tools at the same Streamable HTTP URL and delegates to the same business logic
 as the Azure Functions implementation. Azure Functions remains the production
 deployment transport. Docker remains suitable on an x64 development host or
@@ -163,6 +163,194 @@ Approval decisions use `FABRIC_APPROVAL_NOTEBOOK_ID`. The frontend submits an
 explicit `APPROVED` or `REJECTED` decision, waits for the Fabric notebook job,
 and displays its audit ID. The notebook verifies the exception exists before
 appending to `action_approvals`; it never updates the SQL analytics endpoint.
+
+## Vendor Contract Assurance
+
+**Current hosted status:** all four agent roles are registered and active in
+Foundry: original HWC v6, assurance orchestrator v3, and Contract/RFP analysts
+v2. Specialist A2A 1.0 endpoint discovery is verified, but the live comparison
+still has no execution receipts. See the
+[deployment record](deployment/contract-assurance/README.md) for observed endpoints,
+explicit approvals, native A2A 1.0 migration, and verification limits. The live
+comparison was attempted but **did not pass execution verification**. Publishing
+the required MCP retrieval-tool update is blocked by deployment-storage HTTP 403;
+no network controls were weakened. Hosted status is not a claim that the complete
+document/session workflow passed. [Requirements audit](docs/contract-assurance-audit.md)
+records the earlier predeployment review.
+See [private Copilot Studio connectivity](docs/copilot-studio-private-connectivity.md)
+for the Activity requirement, A2A/custom connector alternatives, and firewall limits.
+
+This separate, **read-only** demo uses three real model-backed services:
+a Responses-hosted orchestrator delegates over **A2A 1.0 JSON-RPC HTTP** to a
+Contract Analyst and an RFP Analyst. Each specialist has its own Agent Framework
+session and one allowlisted MCP retrieval tool. The existing HWC demo, Fabric
+configuration, authentication, and approval workflow are unchanged. The new page
+never calls the deterministic `HostedAgent` mock or the approval endpoint.
+
+Northstar Cloud Services is fictional. Its seeded terms are **demo terms, not
+customer facts**, contractual interpretation, or legal advice:
+
+| Topic | RFP commitment | Contract clause | Result |
+| --- | --- | --- | --- |
+| Uptime | 99.95% | 99.5% | Discrepancy |
+| Service credit | 10% | 5% | Discrepancy |
+| Breach notification | 24 hours | 72 hours | Discrepancy |
+| Data residency | EU | EU | Match |
+
+Stable source IDs are `DEMO-NS-RFP-001` through `004` and
+`DEMO-NS-CON-001` through `004`, respectively, in table order. Both MCP
+transports expose `retrieve_contract_clauses` and `retrieve_rfp_commitments`.
+Missing vendor/topic evidence returns no clauses; specialists must abstain.
+Comparison uses only evidence returned by the remote specialists, not a local
+analyst substitute. No tools modify contracts, Fabric records, or approvals.
+
+### Setup and live client
+
+Use the existing project endpoint and model deployment in the root `.env`.
+Local runs incur model usage, but do not provision resources, deploy agents,
+create connections, or change infrastructure:
+
+```powershell
+agent\.venv\Scripts\python.exe -m pip install -r agent\requirements-contract-assurance.txt
+$env:CONTRACT_ASSURANCE_TRACE = "1"  # Optional; omit for no trace output
+agent\.venv\Scripts\python.exe scripts\start_contract_assurance.py
+```
+
+Open `http://127.0.0.1:5173/contract-assurance.html`. The launcher starts a native
+MCP server if port 8001 is free, A2A specialists on 8091/8092, the real Responses
+orchestrator on 8090, and the frontend on 5173. Existing MCP/frontend processes
+are retained; an existing MCP must be restarted to discover the two new tools.
+An existing frontend must be restarted with `CONTRACT_ASSURANCE_LOCAL=1` and
+`CONTRACT_ORCHESTRATOR_BASE_URL=http://127.0.0.1:8090/`. Stop the launcher with
+Ctrl+C to stop only its own child processes. It does not launch `agent.server`.
+
+The verified local Responses route is `/responses`, not `/v1/responses`.
+The browser sends an opaque application session ID; raw response IDs remain
+server-side, mapped to an HttpOnly, SameSite browser-owner cookie. This frontend
+is a loopback-only demo, not a multi-user authenticated production gateway.
+
+Send these prompts **in the same conversation**, in order:
+
+1. "Compare this vendor's contract with its RFP commitments."
+2. "Generate synthetic findings, then have the RFP Analyst read and validate the document."
+3. "What did they promise instead for service credits?"
+
+Expect three discrepancies and matching EU residency, with both document IDs
+cited for each comparison. The follow-ups should resolve to 10% promised versus
+5% contracted, citing `DEMO-NS-RFP-002` and `DEMO-NS-CON-002`.
+**Reset conversation** invokes the real orchestrator's reset tool for both
+specialists, then discards the parent continuation. A new review starts fresh.
+
+The revised UI shows execution-derived session tags, reuse, document versions,
+and read/annotation receipts. A model's assertion of success without a tool receipt
+is shown as unverified. Findings are actual inline A2A file bytes with a preserved
+artifact ID, incrementing annotation version, parent digest, and source citations.
+
+The CLI checks **hosted** integration only. First configure the observed Foundry
+endpoints, three distinct agent names and deployed versions in the `.env.example`
+fields; the orchestrator base ends with `/protocols/openai/` and specialist URLs
+are their observed A2A protocol endpoints. Existing permissions and private
+connectivity must already be authorized. Then, only in that environment:
+
+```powershell
+$env:CONTRACT_ASSURANCE_LOCAL = "0"
+agent\.venv\Scripts\python.exe scripts\verify_contract_assurance.py --live
+```
+
+Without explicit authorization and remote configuration it reports **NOT RUN**.
+It reads actual hosted version definitions before invoking the three prompts,
+and checks term/citation results, execution-derived gap/residency counts,
+document read/version receipts and the same reused RFP context tag. It reports
+safe receipts only, not conversation content. Offline
+tests use fake analysts and an in-process SDK transport; they are **not proof of
+live A2A**. Model-backed local verification is also not verification of deployed
+Foundry endpoints, managed identities, platform routing, or hosted persistence.
+
+For F5 debugging, run the launcher with `--without-orchestrator`, then select
+**Debug Vendor Contract Assurance**. The original HWC F5 configuration remains
+available. Use the assurance page for the three-service live path.
+
+### Sessions, Authentication, and Traces
+
+Specialist continuation is keyed by trusted caller, parent `AgentSession`, and
+specialist. The A2A server retains its own session keyed by authenticated
+principal and protocol `contextId`. Calls to the same specialist session are
+serialized; different callers/parents/specialists do not share context.
+The parent Responses host resumes through `previous_response_id`; the remote
+specialists resume through A2A `contextId`, not replayed local function calls.
+Storage is in memory and single-process; restarts lose context and now require an
+explicit reset. Unknown/expired state is never silently recreated as reused.
+Logical request IDs deduplicate successful retries; failed calls roll back history,
+and ambiguous calls block different input until retry or reset. Do not treat
+context IDs or trace tags as credentials. Reset clears active context, not a
+durable retention/audit record.
+
+Local anonymous access requires explicit `CONTRACT_ASSURANCE_LOCAL=1` and is
+restricted to loopback. Outside local mode, outgoing requests use
+`DefaultAzureCredential` with `https://ai.azure.com/.default` (or an explicitly
+configured scope) and HTTPS only. Specialist ingress validates signed Entra JWTs
+against `CONTRACT_ASSURANCE_TENANT_ID` and `CONTRACT_ASSURANCE_AUDIENCE`, including
+issuer, tenant, audience, and expiry. The orchestrator requires the trusted user
+identity supplied by Foundry; caller IDs from prompts are never accepted.
+Directly exposing the container with spoofable platform headers is not supported.
+The existing MCP token/audience configuration is reused, with refreshed tokens
+on MCP connections. Hosted ingress, identity permissions, and A2A protocol
+registration must be verified before an approved deployment; none are changed here.
+
+Tracing is off by default. With `CONTRACT_ASSURANCE_TRACE=1`, stderr contains
+one-line `assurance.call` JSON records with an allowlist of role, trace/span IDs,
+parent span, hashed session tag, reuse boolean, elapsed time, and success.
+SDK logging and automatic hosting exporters are disabled on this extension.
+Prompts, completions, clauses, tool arguments/results, tokens, raw caller IDs,
+and raw session IDs are never emitted by this trace path. Do not turn on HTTP
+body/debug logging or broad GenAI instrumentation alongside this demo.
+
+For each comparison, verify linked `orchestrator.compare`, `delegate.contract`,
+`delegate.rfp`, `specialist.contract`, `specialist.rfp`, and `mcp.retrieve`
+events share a trace ID. Delegate/specialist session tags stay stable and
+`session_reused` becomes `true` on both follow-ups; after reset it is `false`.
+Use only these metadata records as trace evidence, not the model's claim that
+it remembered a conversation.
+
+### Verified SDK and Protocol References
+
+The opt-in dependency file pins the locally checked versions: Agent Framework
+core 1.15.0, Foundry 1.11.0, hosting 1.0.0b260821, OpenAI 2.54.0, and official
+`a2a-sdk` 1.2.3. The newest Agent Framework A2A adapter would upgrade core;
+instead this extension uses official native A2A 1.0 JSON-RPC transport/routes and
+SDK conversion helpers behind the existing analyst implementation. The actual
+Foundry service rejected 0.3 and required 1.0; this is a real wire migration, not
+a version-label change. See [the deployment record](deployment/contract-assurance/README.md).
+
+References checked against installed signatures and implementation:
+[Foundry hosted protocols/authentication](https://learn.microsoft.com/en-us/azure/ai-foundry/agents/concepts/hosted-agents),
+[Agent Framework session isolation](https://learn.microsoft.com/en-us/agent-framework/agents/conversations/session),
+[A2A hosting](https://learn.microsoft.com/en-us/agent-framework/integrations/a2a),
+[A2A 0.3 specification](https://a2a-protocol.org/v0.3.0/specification/).
+
+### Verification Record
+
+**Historical, before the document-handoff audit changes:** verified locally on
+2026-10-28 with the existing Foundry model: all three live
+acceptance prompts passed the CLI term/citation checks, including three
+discrepancies and matching EU residency. Real A2A HTTP metadata showed both
+specialists retaining stable session tags and reuse on both follow-ups. The
+browser live flow and reset also completed; desktop/mobile checks found no
+horizontal overflow. No deterministic mock was used for this live evidence.
+
+Offline: 14 assurance tests passed (comparison, citations, missing evidence,
+transport parity, reuse, isolation, concurrency, reset, browser ownership,
+JWT validation, and trace privacy). The complete suite reported **30 passed,
+1 failed**. The pre-existing `test_agent_handles_summary_without_risks` failure
+returns `[]` for the action mock while the existing agent expects an action
+dictionary; the extension does not alter that unrelated behavior. JavaScript
+syntax, Python compilation, and whitespace checks passed.
+
+Outstanding: no Azure deployment was performed. Foundry-hosted A2A protocol
+registration, endpoint routing, managed-identity permissions, and authenticated
+multi-user hosted invocation have **not** been verified. A2A 0.3 preview and
+the pinned SDK's deprecation warnings remain compatibility constraints. The
+local session stores are not durable or cross-process production stores.
 
 ## OneLake configuration
 

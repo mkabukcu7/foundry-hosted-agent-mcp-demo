@@ -11,7 +11,7 @@ azure = [
   "opentelemetry-api>=1.25.0",
   "opentelemetry-sdk>=1.25.0",
 ]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "PyYAML>=6,<7"]
 
 [build-system]
 requires = ["setuptools>=68"]

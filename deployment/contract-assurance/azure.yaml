@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: vendor-contract-assurance
+services:
+    assurance-orchestrator:
+        project: .build/agent-code
+        host: azure.ai.agent
+        language: python
+        uses:
+            - foundry-project
+        env:
+            AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+            CONTRACT_ANALYST_URL: ${CONTRACT_ANALYST_URL}
+            CONTRACT_ASSURANCE_LOCAL: "0"
+            CONTRACT_ASSURANCE_ROLE: orchestrator
+            CONTRACT_ASSURANCE_SCOPE: https://ai.azure.com/.default
+            CONTRACT_ASSURANCE_TRACE: ${CONTRACT_ASSURANCE_TRACE}
+            RFP_ANALYST_URL: ${RFP_ANALYST_URL}
+        codeConfiguration:
+            dependencyResolution: remote_build
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        kind: hosted
+        name: assurance-orchestrator
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+    contract-analyst:
+        project: .build/agent-code
+        host: azure.ai.agent
+        language: python
+        uses:
+            - foundry-project
+        env:
+            AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+            CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS: ${CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS}
+            CONTRACT_ASSURANCE_AUDIENCE: ${CONTRACT_ASSURANCE_AUDIENCE}
+            CONTRACT_ASSURANCE_LOCAL: "0"
+            CONTRACT_ASSURANCE_PUBLIC_URL: ${CONTRACT_ANALYST_URL}
+            CONTRACT_ASSURANCE_ROLE: contract
+            CONTRACT_ASSURANCE_TENANT_ID: ${CONTRACT_ASSURANCE_TENANT_ID}
+            CONTRACT_ASSURANCE_TRACE: ${CONTRACT_ASSURANCE_TRACE}
+            MCP_AUDIENCE: ${MCP_AUDIENCE}
+            MCP_SERVER_URL: ${MCP_SERVER_URL}
+        codeConfiguration:
+            dependencyResolution: remote_build
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        kind: hosted
+        name: contract-analyst
+        protocols: [{protocol: a2a, version: 1.0.0}]
+        agentEndpoint: {protocols: [responses, a2a]}
+        agentCard: {version: 1.0.0, description: Read-only fictional Northstar contract evidence and synthetic findings., skills: [{id: contract-evidence, name: Contract evidence, description: Retrieve scoped contract evidence and generate synthetic findings., tags: [contract, read-only]}]}
+    foundry-project:
+        host: azure.ai.project
+        endpoint: ${AZURE_AI_PROJECT_ENDPOINT}
+    rfp-analyst:
+        project: .build/agent-code
+        host: azure.ai.agent
+        language: python
+        uses:
+            - foundry-project
+        env:
+            AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+            CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS: ${CONTRACT_ASSURANCE_ALLOWED_CALLER_IDS}
+            CONTRACT_ASSURANCE_AUDIENCE: ${CONTRACT_ASSURANCE_AUDIENCE}
+            CONTRACT_ASSURANCE_LOCAL: "0"
+            CONTRACT_ASSURANCE_PUBLIC_URL: ${RFP_ANALYST_URL}
+            CONTRACT_ASSURANCE_ROLE: rfp
+            CONTRACT_ASSURANCE_TENANT_ID: ${CONTRACT_ASSURANCE_TENANT_ID}
+            CONTRACT_ASSURANCE_TRACE: ${CONTRACT_ASSURANCE_TRACE}
+            MCP_AUDIENCE: ${MCP_AUDIENCE}
+            MCP_SERVER_URL: ${MCP_SERVER_URL}
+        codeConfiguration:
+            dependencyResolution: remote_build
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "0.5"
+                memory: 1Gi
+        kind: hosted
+        name: rfp-analyst
+        protocols: [{protocol: a2a, version: 1.0.0}]
+        agentEndpoint: {protocols: [responses, a2a]}
+        agentCard: {version: 1.0.0, description: Read-only fictional Northstar RFP commitments and findings annotations., skills: [{id: rfp-evidence, name: RFP evidence, description: Retrieve scoped RFP commitments and annotate synthetic findings., tags: [rfp, read-only]}]}
+infra:
+    provider: microsoft.foundry

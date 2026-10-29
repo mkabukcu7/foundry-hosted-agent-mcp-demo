@@ -1,0 +1,6 @@
+**
+!agent/
+!agent/*.py
+!agent/requirements*.txt
+!shared/
+!shared/*.py
