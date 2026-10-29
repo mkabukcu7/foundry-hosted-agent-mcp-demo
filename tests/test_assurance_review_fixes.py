@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import httpx
 
-from agent.assurance_runtime import PRINCIPAL, ResponsesRemote, new_request_id
+from agent.assurance_runtime import ContextUnavailable, PRINCIPAL, ResponsesRemote, SpecialistSessions, new_request_id
 from agent.contract_specialist import SpecialistExecutor
 from frontend.assurance_client import AssuranceGateway
 from frontend.server import DemoHandler
@@ -147,6 +147,114 @@ class TransportReviewTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CleanupReviewTests(unittest.IsolatedAsyncioTestCase):
+    async def test_parent_cleanup_evicts_documents_and_continuations_until_explicit_reset(self):
+        class Remote:
+            def __init__(self):
+                self.continuations = {}
+
+            async def send(self, question, context_id=None, reset=False, **kwargs):
+                return context_id or "fresh-context", {
+                    "context_reused": context_id is not None, "context_reset": reset,
+                }
+
+        remote = Remote()
+        sessions = SpecialistSessions({"contract": remote}, ttl_seconds=10)
+        await sessions.ask("alice", "parent", "contract", "Compare")
+        key = ("alice", "parent")
+        remote.continuations["fresh-context"] = "response-id"
+        sessions.artifacts[key] = {"input": {"parts": [{"file": {"bytes": "document"}}]}}
+        sessions.parent_activity[key] -= 11
+
+        sessions.cleanup()
+
+        self.assertNotIn(("alice", "parent", "contract"), sessions.contexts)
+        self.assertNotIn(key, sessions.artifacts)
+        self.assertNotIn("fresh-context", remote.continuations)
+        with self.assertRaises(ContextUnavailable):
+            await sessions.ask("alice", "parent", "contract", "Continue")
+        await sessions.reset("alice", "parent")
+        result = await sessions.ask("alice", "parent", "contract", "Start fresh")
+        self.assertFalse(result["session_reused"])
+
+    async def test_parent_cleanup_protects_active_and_unresolved_operations(self):
+        started, release = asyncio.Event(), asyncio.Event()
+
+        class Remote:
+            async def send(self, question, context_id=None, **kwargs):
+                started.set()
+                await release.wait()
+                if question == "Unresolved":
+                    raise TimeoutError("ambiguous response")
+                return "context", {"context_reused": False}
+
+        sessions = SpecialistSessions({"contract": Remote()}, ttl_seconds=10)
+        request = asyncio.create_task(sessions.ask("alice", "parent", "contract", "Active"))
+        await started.wait()
+        key = ("alice", "parent")
+        sessions.parent_activity[key] -= 11
+        sessions.cleanup()
+        self.assertIn(("alice", "parent", "contract"), sessions.contexts)
+        self.assertNotIn(key, sessions.expired_parents)
+        release.set()
+        await request
+
+        with self.assertRaises(TimeoutError):
+            await sessions.ask("alice", "parent", "contract", "Unresolved")
+        sessions.parent_activity[key] -= 11
+        sessions.cleanup()
+        self.assertIn(("alice", "parent", "contract"), sessions.contexts)
+        self.assertNotIn(key, sessions.expired_parents)
+
+    async def test_parent_cleanup_preserves_failed_reset_for_acknowledged_retry(self):
+        class Remote:
+            fail_reset = True
+
+            async def send(self, question, context_id=None, reset=False, **kwargs):
+                return context_id or "context", {
+                    "context_reused": context_id is not None,
+                    "context_reset": reset and not self.fail_reset,
+                }
+
+        sessions = SpecialistSessions({"contract": Remote()}, ttl_seconds=10)
+        await sessions.ask("alice", "parent", "contract", "Compare")
+        key = ("alice", "parent")
+        with self.assertRaises(ContextUnavailable):
+            await sessions.reset(*key)
+        sessions.parent_activity[key] -= 11
+
+        sessions.cleanup()
+
+        state = sessions.contexts[("alice", "parent", "contract")]
+        self.assertTrue(state.reset_required)
+        self.assertNotIn(key, sessions.expired_parents)
+        sessions.remotes["contract"].fail_reset = False
+        await sessions.reset(*key)
+        self.assertFalse(state.reset_required)
+
+    async def test_parent_cleanup_runs_periodically_and_capacity_is_bounded(self):
+        class Remote:
+            async def send(self, question, context_id=None, **kwargs):
+                return context_id or question, {"context_reused": context_id is not None}
+
+        sessions = SpecialistSessions({"contract": Remote()}, ttl_seconds=0.1, max_entries=1)
+        await sessions.ask("alice", "parent", "contract", "First")
+        maintenance = asyncio.create_task(sessions.maintain())
+        try:
+            with self.assertRaisesRegex(RuntimeError, "capacity"):
+                await sessions.ask("alice", "other", "contract", "Blocked")
+            await asyncio.sleep(0.15)
+            self.assertNotIn(("alice", "parent", "contract"), sessions.contexts)
+            with self.assertRaises(ContextUnavailable):
+                await sessions.ask("alice", "parent", "contract", "Stale")
+            with self.assertRaisesRegex(RuntimeError, "capacity"):
+                await sessions.ask("alice", "other", "contract", "Still bounded")
+            await sessions.reset("alice", "parent")
+            await sessions.ask("alice", "other", "contract", "After reset")
+        finally:
+            maintenance.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await maintenance
+
     async def test_cleanup_releases_documents_and_history_but_old_replay_is_rejected(self):
         analyst = OfflineDocumentAnalyst("contract")
         executor = SpecialistExecutor(analyst, "contract", ttl_seconds=10)

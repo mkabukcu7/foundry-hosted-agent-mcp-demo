@@ -248,16 +248,93 @@ class RemoteContext:
     reset_required: bool = False
 
 
+class ParentLock:
+    def __init__(self):
+        self.lock = asyncio.Lock()
+        self.users = 0
+
+    async def __aenter__(self):
+        self.users += 1
+        try:
+            await self.lock.acquire()
+        except BaseException:
+            self.users -= 1
+            raise
+        return self
+
+    async def __aexit__(self, *_):
+        self.lock.release()
+        self.users -= 1
+
+
 class SpecialistSessions:
-    def __init__(self, remotes):
+    def __init__(self, remotes, *, ttl_seconds=1800, max_entries=1024):
+        if ttl_seconds <= 0 or max_entries < 1:
+            raise ValueError("Parent session TTL and capacity must be positive.")
         self.remotes = remotes
         self.contexts = {}
         self.artifacts = {}
         self.handoff_locks = {}
+        self.parent_activity = {}
+        self.expired_parents = set()
+        self.ttl_seconds = ttl_seconds
+        self.max_entries = max_entries
+
+    def _parent_key(self, principal, parent_session):
+        return principal, parent_session
+
+    def _busy(self, key):
+        lock = self.handoff_locks.get(key)
+        if lock is not None and lock.users:
+            return True
+        for context_key, state in self.contexts.items():
+            if context_key[:2] == key and (state.lock.locked() or state.pending_id or state.reset_required):
+                return True
+        return False
+
+    def _drop_parent_data(self, key):
+        for context_key, state in list(self.contexts.items()):
+            if context_key[:2] != key:
+                continue
+            remote = self.remotes[context_key[2]]
+            continuations = getattr(remote, "continuations", None)
+            if continuations is not None:
+                for context_id in (state.context_id, state.pending_id):
+                    if context_id:
+                        continuations.pop(context_id, None)
+            del self.contexts[context_key]
+        self.artifacts.pop(key, None)
+
+    def cleanup(self, now=None):
+        now = time.monotonic() if now is None else now
+        for key, last_used in list(self.parent_activity.items()):
+            if key in self.expired_parents or now - last_used < self.ttl_seconds or self._busy(key):
+                continue
+            self._drop_parent_data(key)
+            self.expired_parents.add(key)
+        for key, lock in list(self.handoff_locks.items()):
+            if not lock.users and key not in self.parent_activity:
+                del self.handoff_locks[key]
+
+    async def maintain(self):
+        while True:
+            await asyncio.sleep(min(60, self.ttl_seconds / 2))
+            self.cleanup()
+
+    def _touch_parent(self, principal, parent_session, *, allow_expired=False):
+        self.cleanup()
+        key = self._parent_key(principal, parent_session)
+        if key in self.expired_parents and not allow_expired:
+            raise ContextUnavailable("Parent session expired. Explicitly reset the review before continuing.")
+        if key not in self.parent_activity and len(self.parent_activity) >= self.max_entries:
+            raise RuntimeError("Parent session capacity is full; explicitly reset an expired review.")
+        self.parent_activity[key] = time.monotonic()
+        return key
 
     async def ask(self, principal, parent_session, specialist, question, *, action="query", artifact=None):
         if not principal or not parent_session or specialist not in self.remotes:
             raise ValueError("Trusted principal, parent session, and specialist are required.")
+        self._touch_parent(principal, parent_session)
         key = (principal, parent_session, specialist)
         state = self.contexts.setdefault(key, RemoteContext())
         async with state.lock:
@@ -285,14 +362,25 @@ class SpecialistSessions:
                     raise ContextUnavailable("Specialist did not retain its context. Explicitly reset the review.")
                 state.context_id = context_id
                 state.pending_id = state.pending_digest = None
+                self.parent_activity[(principal, parent_session)] = time.monotonic()
             return {**result, "session_reused": reused, "session_tag": session_tag(context_id)}
 
     async def reset(self, principal, parent_session):
-        async with self.parent_lock(principal, parent_session):
+        key = self.parent_lock(principal, parent_session, allow_expired=True)
+        was_expired = (principal, parent_session) in self.expired_parents
+        async with key:
             await self._reset(principal, parent_session)
+            parent_key = self._parent_key(principal, parent_session)
+            self.parent_activity[parent_key] = time.monotonic()
+            if was_expired:
+                self.expired_parents.discard(parent_key)
+                self.parent_activity.pop(parent_key, None)
+        if was_expired and not key.users:
+            self.handoff_locks.pop((principal, parent_session), None)
 
-    def parent_lock(self, principal, parent_session):
-        return self.handoff_locks.setdefault((principal, parent_session), asyncio.Lock())
+    def parent_lock(self, principal, parent_session, *, allow_expired=False):
+        key = self._touch_parent(principal, parent_session, allow_expired=allow_expired)
+        return self.handoff_locks.setdefault(key, ParentLock())
 
     async def _reset(self, principal, parent_session):
         states = [(specialist, self.contexts.get((principal, parent_session, specialist)))
@@ -312,6 +400,11 @@ class SpecialistSessions:
                         abandon_request=state.pending_id)
                     if not result.get("context_reset"):
                         raise ContextUnavailable("Specialist reset was not acknowledged; continuity remains blocked.")
+                    continuations = getattr(self.remotes[specialist], "continuations", None)
+                    if continuations is not None:
+                        for context_id in (state.context_id, state.pending_id):
+                            if context_id:
+                                continuations.pop(context_id, None)
             for _, state in states:
                 if state is None:
                     continue

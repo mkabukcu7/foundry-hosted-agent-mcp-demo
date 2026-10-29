@@ -1,6 +1,7 @@
 """Responses-hosted orchestrator and separately hosted specialist calls."""
 
 import asyncio
+from contextlib import suppress
 import os
 from pathlib import Path
 
@@ -93,8 +94,14 @@ async def main():
         client = FoundryChatClient(project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
                                    model=os.environ["AZURE_AI_MODEL_DEPLOYMENT_NAME"], credential=credential)
         from agent.assurance_runtime import local_mode
-        await ResponsesHostServer(build_orchestrator(client, sessions), configure_observability=None).run_async(
-            host="127.0.0.1" if local_mode() else "0.0.0.0", port=int(os.getenv("PORT", "8090")))
+        maintenance = asyncio.create_task(sessions.maintain())
+        try:
+            await ResponsesHostServer(build_orchestrator(client, sessions), configure_observability=None).run_async(
+                host="127.0.0.1" if local_mode() else "0.0.0.0", port=int(os.getenv("PORT", "8090")))
+        finally:
+            maintenance.cancel()
+            with suppress(asyncio.CancelledError):
+                await maintenance
 
 
 if __name__ == "__main__":
