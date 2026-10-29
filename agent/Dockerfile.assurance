@@ -1,0 +1,9 @@
+FROM python:3.13-slim
+WORKDIR /app
+COPY agent/requirements*.txt /app/agent/
+RUN pip install --no-cache-dir -r agent/requirements-contract-assurance.txt
+COPY agent/*.py /app/agent/
+COPY shared/*.py /app/shared/
+ENV PYTHONPATH=/app PYTHONNOUSERSITE=1 PORT=8088 CONTRACT_ASSURANCE_LOCAL=0
+EXPOSE 8088
+CMD ["python", "-m", "agent.assurance_host"]

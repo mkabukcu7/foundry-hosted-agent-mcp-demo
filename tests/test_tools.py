@@ -42,7 +42,7 @@ class ToolTests(unittest.TestCase):
         )
 
     def test_discovery_has_all_tools(self):
-        self.assertEqual({tool["name"] for tool in mcp.TOOLS}, {"search_hwc_knowledge", "list_business_summaries", "get_business_summary", "prepare_follow_up_action"})
+        self.assertEqual({tool["name"] for tool in mcp.TOOLS}, {"search_hwc_knowledge", "list_business_summaries", "get_business_summary", "prepare_follow_up_action", "retrieve_contract_clauses", "retrieve_rfp_commitments"})
 
     def test_lists_all_business_summaries(self):
         mcp.STATE["HWC-1002"] = {

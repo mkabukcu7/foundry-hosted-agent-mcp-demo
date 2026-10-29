@@ -3,6 +3,7 @@
 import copy
 
 from shared.data import KNOWLEDGE, get_business_records
+from shared.contract_assurance import VENDOR_ID, retrieve_terms
 from shared.validation import optional_positive_int, required_text
 
 TOOLS = [
@@ -10,6 +11,11 @@ TOOLS = [
     {"name": "list_business_summaries", "description": "List all governed HWC client or process summaries.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "get_business_summary", "description": "Return a grounded summary for a fictional client or process.", "inputSchema": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}},
     {"name": "prepare_follow_up_action", "description": "Prepare a fictional action; never executes without explicit human approval.", "inputSchema": {"type": "object", "properties": {"entity_id": {"type": "string"}, "action_type": {"type": "string"}, "instructions": {"type": "string"}}, "required": ["entity_id", "action_type", "instructions"]}},
+    *[
+        {"name": name, "description": f"Read fictional Northstar {document_set} clauses with stable citations; no writes.",
+         "inputSchema": {"type": "object", "properties": {"vendor_id": {"type": "string"}, "topic": {"type": "string"}}}}
+        for name, document_set in (("retrieve_contract_clauses", "contract"), ("retrieve_rfp_commitments", "rfp"))
+    ],
 ]
 STATE = {}
 
@@ -26,6 +32,13 @@ def reset_state():
 
 def call_tool(name, arguments):
     arguments = arguments or {}
+    if name in {"retrieve_contract_clauses", "retrieve_rfp_commitments"}:
+        document_set = "contract" if name == "retrieve_contract_clauses" else "rfp"
+        vendor_id = required_text(arguments.get("vendor_id", VENDOR_ID), "vendor_id")
+        topic = arguments.get("topic")
+        if topic is not None:
+            topic = required_text(topic, "topic")
+        return retrieve_terms(document_set, vendor_id, topic)
     if name == "search_hwc_knowledge":
         query = required_text(arguments.get("query"), "query").lower()
         category = arguments.get("category")

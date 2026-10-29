@@ -10,4 +10,5 @@ dist/
 build/
 *.egg-info/
 .azure/
+deployment/contract-assurance/.build/
 /demo_requirement.md

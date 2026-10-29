@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vendor Contract Assurance</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div><span class="brand-context">Vendor oversight</span><strong>Vendor Contract Assurance</strong><span class="brand-value">Northstar Cloud Services &#183; Fictional demo terms</span></div></div>
+    <nav class="system-status"><a href="/">Exception workspace</a><span class="divider"></span><span id="assurance-status" role="status">Live orchestrator</span></nav>
+  </header>
+  <main class="assurance-workspace">
+    <section class="briefing" aria-labelledby="assurance-title">
+      <div class="briefing-header"><div><span class="eyebrow">Read-only review</span><h1 id="assurance-title">Commitments vs. contract</h1></div><button id="assurance-reset" type="button">Reset conversation</button></div>
+      <div class="assurance-participants" aria-label="Review participants"><span>Assurance orchestrator</span><span>Contract Analyst</span><span>RFP Analyst</span></div>
+      <div id="assurance-conversation" class="conversation" aria-live="polite"></div>
+      <div class="quick-actions assurance-prompts">
+        <button type="button" data-assurance-prompt="Compare this vendor's contract with its RFP commitments.">Compare commitments</button>
+        <button type="button" data-assurance-prompt="Generate synthetic findings, then have the RFP Analyst read and validate the document.">Generate and validate findings</button>
+        <button type="button" data-assurance-prompt="What did they promise instead for service credits?">Find the original promise</button>
+      </div>
+      <section class="assurance-receipts" aria-label="Execution receipts"><h2>Execution status</h2><div id="assurance-receipts" role="status">Not verified</div></section>
+      <form id="assurance-form" class="composer"><label for="assurance-prompt">Question for the review</label><div class="composer-row"><textarea id="assurance-prompt" rows="2" maxlength="8000" required></textarea><button id="assurance-send" type="submit" title="Send question" aria-label="Send question">&#8593;</button></div></form>
+    </section>
+  </main>
+  <script src="contract-assurance.js"></script>
+</body>
+</html>

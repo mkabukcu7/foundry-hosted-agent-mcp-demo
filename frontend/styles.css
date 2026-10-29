@@ -156,6 +156,19 @@ textarea:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; 
 .data-path li span { width: 21px; height: 21px; display: grid; place-items: center; border: 1px solid #aeb4b0; font-size: 10px; }
 
 @keyframes reveal { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.system-status a { color: var(--green); text-underline-offset: 3px; }
+.assurance-workspace { max-width: 1080px; margin: 0 auto; min-height: calc(100vh - 85px); background: var(--panel); }
+.assurance-workspace .briefing { min-height: calc(100vh - 85px); }
+.assurance-workspace h1 { font-size: 30px; }
+.assurance-workspace .briefing-header { flex-wrap: wrap; }
+.assurance-workspace .message { max-width: 100%; overflow-wrap: anywhere; }
+.assurance-participants { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 18px 0; margin-top: 20px; border-block: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.assurance-prompts { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+#assurance-reset { min-height: 36px; border: 1px solid var(--line); padding: 8px 12px; background: var(--panel); color: var(--ink); cursor: pointer; }
+#assurance-send { width: 46px; height: 46px; border: 0; margin-top: 8px; color: white; background: var(--green); font-size: 22px; cursor: pointer; }
+.assurance-workspace button:disabled { opacity: .55; cursor: wait; }
+.assurance-receipts { padding: 14px 0; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.assurance-receipts h2 { margin: 0 0 8px; font-size: 12px; color: var(--ink); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 1040px) {

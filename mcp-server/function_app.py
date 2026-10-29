@@ -9,6 +9,22 @@ app = func.FunctionApp()
 
 
 @app.mcp_tool()
+@app.mcp_tool_property(arg_name="vendor_id", description="Fictional vendor ID; northstar-demo by default.", is_required=False)
+@app.mcp_tool_property(arg_name="topic", description="Optional exact clause topic, such as service_credit.", is_required=False)
+def retrieve_contract_clauses(vendor_id: str = "northstar-demo", topic: str | None = None) -> list[dict]:
+    """Read fictional contract clauses with stable citations; never writes."""
+    return call_tool("retrieve_contract_clauses", {"vendor_id": vendor_id, "topic": topic})
+
+
+@app.mcp_tool()
+@app.mcp_tool_property(arg_name="vendor_id", description="Fictional vendor ID; northstar-demo by default.", is_required=False)
+@app.mcp_tool_property(arg_name="topic", description="Optional exact commitment topic, such as service_credit.", is_required=False)
+def retrieve_rfp_commitments(vendor_id: str = "northstar-demo", topic: str | None = None) -> list[dict]:
+    """Read fictional RFP commitments with stable citations; never writes."""
+    return call_tool("retrieve_rfp_commitments", {"vendor_id": vendor_id, "topic": topic})
+
+
+@app.mcp_tool()
 @app.mcp_tool_property(
     arg_name="query",
     description="Terms to find in governed HWC knowledge.",

@@ -57,5 +57,15 @@ def prepare_follow_up_action(
     )
 
 
+@mcp.tool()
+def retrieve_contract_clauses(vendor_id: str = "northstar-demo", topic: str | None = None) -> list[dict]:
+    return call_tool("retrieve_contract_clauses", {"vendor_id": vendor_id, "topic": topic})
+
+
+@mcp.tool()
+def retrieve_rfp_commitments(vendor_id: str = "northstar-demo", topic: str | None = None) -> list[dict]:
+    return call_tool("retrieve_rfp_commitments", {"vendor_id": vendor_id, "topic": topic})
+
+
 if __name__ == "__main__":
     mcp.run(transport="streamable-http")

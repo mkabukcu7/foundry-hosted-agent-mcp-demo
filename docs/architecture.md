@@ -54,6 +54,28 @@ raw zones directly, and apply row/column security in the serving layer rather
 than relying on agent instructions. SharePoint or business APIs remain separate
 adapters behind the same policy and telemetry boundary.
 
+## Contract Assurance Extension
+
+The optional contract-assurance path is separate from the HWC deterministic UI:
+
+```mermaid
+flowchart LR
+   UI[Assurance browser client] -->|Responses HTTP| O[Real hosted orchestrator]
+   O -->|A2A 0.3 JSON-RPC| C[Contract Analyst]
+   O -->|A2A 0.3 JSON-RPC| R[RFP Analyst]
+   C -->|Allowlisted read-only MCP| CT[(Fictional contract clauses)]
+   R -->|Allowlisted read-only MCP| RT[(Fictional RFP commitments)]
+```
+
+Each specialist owns its model conversation history. The orchestrator maps
+trusted caller/parent/specialist to a remote context, never a shared global
+conversation. Reset clears those active histories. Metadata-only trace records
+link network calls and demonstrate reuse without logging their content. The
+browser gateway retains protocol continuation IDs server-side and checks browser
+ownership. Local runs use separate real hosting processes, not deployed Foundry
+resources; deployed protocol/authentication verification remains a separate gate.
+See the README for setup, preview protocol/version constraints, and trace checks.
+
 ## Production Decisions
 
 - Public versus private MCP ingress and DNS resolution from Foundry

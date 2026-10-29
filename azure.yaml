@@ -50,6 +50,7 @@ services:
     mcp-server:
         project: ./mcp-server
         host: function
+        resourceName: ${SERVICE_API_NAME}
         language: python
         dist: ../.azure/mcp-server
         hooks:
