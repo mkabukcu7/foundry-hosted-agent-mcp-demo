@@ -2,18 +2,19 @@
 
 ## Status
 
-Complete hosted acceptance passed on 2026-10-29 at 14:55-14:58 UTC after the
-approved Responses migration: orchestrator v8, Contract v5, RFP v5. Original
+Corrected hosted acceptance passed on 2026-10-29 at 22:34-22:40 UTC after the
+approved PR-fix deployment: orchestrator v9, Contract v6, RFP v6. Original
 HWC v6 is unchanged. MCP publishing succeeded and both retrieval tools executed.
 All three acceptance turns have actual receipts, including exact artifact
-read/annotation lineage and stable reused RFP context. Existing Application
-Insights contains 94 metadata spans and four linked successful business trace
-trees. See the [hosted deployment record](../deployment/contract-assurance/README.md)
+read/annotation lineage and stable reused RFP context; reset and new contexts
+also passed. A fresh browser run repeated all five actions. Existing Application
+Insights contains 330 metadata spans and ten linked successful business trees
+across both completed runs. See the [hosted deployment record](../deployment/contract-assurance/README.md)
 for versions, approvals, and trace IDs.
 
 ## Request-Context And Scoped Permission Investigation
 
-### PR #5 Follow-Up: Local Verification Complete, Cloud Approval Pending
+### PR #5 Follow-Up: Corrected Hosted Deployment And Verification Complete
 
 All five review findings are fixed, with 49 passing focused tests and compile/
 whitespace validation. A real-model local browser run against the corrected
@@ -22,10 +23,16 @@ follow-up reuse, acknowledged reset, and new contexts afterward. Local metadata
 verifies all five business trace trees. Live negative checks verified Host
 rejection and reset recovery after a rejected stale transport continuation.
 
-Explicit approval to redeploy the three existing hosted agents was requested but
-unavailable. No Azure deployment, provisioning, permission, or model changes
-were made. Hosted v8/v5/v5 remains the earlier baseline; corrected hosted
-verification must follow a separately approved redeployment.
+After the initial local-only verification, the user requested hosted testing.
+Deployed the same corrected source package to existing orchestrator v9 and both
+specialists v6. All three are active with matching package hash
+`fb0570aafbb2884e18e3a5057b8ff7db98bc45c3e829571dbaec5fa660c4f3b0`.
+No provisioning, permission, identity, model, or MCP allowlist changes occurred.
+Hosted acceptance and a fresh browser run passed all three turns, acknowledged
+reset, and new contexts. Existing Insights verifies ten fully linked successful
+business trees, 24 successful specialist sends/authorizations, and 20 retrievals.
+The earlier browser network-suspension attempt is retained separately, not
+silently treated as success. Hosted v8/v5/v5 remains historical baseline evidence.
 
 ### Approved Responses Migration; Hosted Verification Complete
 

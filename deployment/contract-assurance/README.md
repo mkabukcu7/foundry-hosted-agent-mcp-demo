@@ -10,7 +10,65 @@ After initially stopping cloud changes and declining a temporary private runner,
 the user approved read-only diagnosis and one controlled MCP publish retry.
 That retry succeeded without further network, identity, or permission changes.
 
-### PR #5 Fixes: Corrected Local Live Demo; Hosted Redeployment Pending
+### PR #5 Fixes: Corrected Hosted And Browser Verification (22:34-22:45 UTC)
+
+- After the initial local-only demo below, the user requested hosted testing.
+  Corrected source commit `6de79f7` was deployed to the three existing assurance
+  agents only: orchestrator v9, Contract v6, RFP v6. All are active with unchanged
+  principals and matching source package hash
+  `fb0570aafbb2884e18e3a5057b8ff7db98bc45c3e829571dbaec5fa660c4f3b0`.
+  No provisioning, permission, identity, model, or MCP caller changes occurred.
+  The deferred evaluation-suite decision is unchanged.
+- The hosted verifier checked all three hosted definitions and passed the three
+  existing turns at 22:34:58-22:40:10 UTC: three discrepancies/EU match and all
+  eight citations; exact version-1 findings read and version-2 annotation lineage;
+  and the 10% service-credit follow-up with the same reused RFP context.
+  Additional calls verified the actual `contexts_reset` receipt and fresh
+  Contract/RFP contexts with new tags afterward.
+- The verifier's artifact `690e7b586d9c42eb838dee7f19ab794e` version 1 had SHA-256
+  `7d7b671c67b47666bc23242478cadc836252dab9eaa4e5ab83fc95c1d3942c83`;
+  both the read receipt and annotation parent matched that exact reference.
+  Version 2 had SHA-256
+  `550d643ad2d1f82ac551a7eb5a54d8644c30fd838a871d6956fa9f14b3119631`.
+- A fresh real-browser run then repeated all five actions through the loopback
+  gateway to Azure v9/v6/v6 and the deployed authenticated MCP service.
+  Every response was HTTP 200/live; no rendered errors remained. RFP tag
+  `a5633378fb26b7d6` was reused for handoff/follow-up, then changed to
+  `ab898ebcd3785b39` with reuse false after acknowledged reset. Contract tags
+  similarly changed from `02c62649c014c4ee` to `a74c8b73258e942b`.
+  Browser artifact `c80bdc83d0a848549f5f7ad546a6775b` version-1 read/parent
+  SHA-256 was `907e1483721119e5321ea4bd27347fe70e58df74055f7babc75ceda223ad055f`;
+  version 2 was `a1dbdc718cdf323ce83b25bf1fe2b3866303c75958c963b733a9cc57b7b1389f`.
+- Existing `appi-nowhyh5puoj7q` contains 330 metadata spans for those two runs:
+  ten fully linked successful business trees (134 business spans), 24 successful
+  specialist sends, 24 successful authorizations, and 20 successful retrievals.
+  Authorization and MCP HTTP diagnostics are separate from the business trees.
+  All 24 unsuccessful diagnostic spans were MCP HTTP 405; no failed retrieval
+  or business descendant occurred in the completed runs.
+
+  | Operation | Acceptance trace ID | Browser trace ID |
+  | --- | --- | --- |
+  | Initial comparison | `a0e897c9d10c4b0bb6d9847b8bf05c94` | `8adb67c9ec6c44048da27ea5894667a1` |
+  | Document handoff | `1cda151ed4ed4930b6fda4277f18d2fd` | `bf37c51b79de45afacc5f89a59cb0454` |
+  | Document-turn comparison | `fe07cf997ce5458ca91f3e78819fd650` | `1dfcd5af75b149a2860148865bf4850a` |
+  | Service-credit follow-up | `3d0c295e438c491d991a9e609d6c74ec` | `4524eb460a3f4b079f45892cf599b299` |
+  | Fresh comparison after reset | `4dfc88782bbf473085d317a5ff98b59d` | `947061c2c48347b3aa58c09c2c85d1f5` |
+
+- An earlier browser attempt completed comparison but reported
+  `ERR_NETWORK_IO_SUSPENDED` during handoff; associated cancellation spans are
+  retained separately. It was not counted as a passing browser run. The fresh
+  browser run above completed without suspension or business failures.
+- The Azure MCP log-query identity returned insufficient access; the existing
+  authenticated Azure CLI identity successfully queried the same Insights app
+  without permission changes. A KQL reserved-word alias was corrected during
+  query setup. Telemetry assertions account for the exporter's root parent-ID
+  representation while requiring every business descendant's real parent.
+- TTL/capacity, lost-first-response refusal, and stale-continuation injection
+  remain focused regression/local-live checks, not claimed injected into Azure.
+  In-memory restart/replica durability and production multi-user authentication
+  remain outside this acceptance run.
+
+### Historical Predeployment Local Review-Fix Verification
 
 - All five review findings are fixed: loopback Host validation before assurance
   session creation/forwarding, reset without stale specialist Responses
@@ -24,8 +82,8 @@ That retry succeeded without further network, identity, or permission changes.
 - A corrected-code browser demo used separate local agents with the existing real
   Foundry model and the local synthetic MCP service. No Azure resource or
   permission changes, provisioning, or deployment occurred. Hosted redeployment
-  approval was unavailable; the active Azure versions in the table below still
-  contain the earlier code. This local run is not new hosted verification.
+  approval was unavailable at that point; Azure still used v8/v5/v5.
+  This local run was not hosted verification; the later approved run is above.
 - All three browser turns passed: three discrepancies/matching EU residency with
   eight citations; exact generated-document read and version-2 annotation lineage;
   and service-credit follow-up with the same reused RFP context. Reset received
@@ -70,9 +128,9 @@ That retry succeeded without further network, identity, or permission changes.
 | Agent | Hosted version | Status | Protocol |
 | --- | --- | --- | --- |
 | `hwc-governed-agent` | 6 | Active, unchanged | Responses 2.0 |
-| `assurance-orchestrator` | 8 | Active, complete acceptance passed | Responses 2.0 |
-| `contract-analyst` | 5 | Active, authenticated retrieval verified | Responses 2.0 |
-| `rfp-analyst` | 5 | Active, handoff and reuse verified | Responses 2.0 |
+| `assurance-orchestrator` | 9 | Active, corrected acceptance/reset passed | Responses 2.0 |
+| `contract-analyst` | 6 | Active, authenticated retrieval verified | Responses 2.0 |
+| `rfp-analyst` | 6 | Active, handoff and reuse verified | Responses 2.0 |
 
 The three new agents were deployed with explicit approval. They are separate
 Foundry hosted agents, not local processes or prompt-agent substitutes. Original code

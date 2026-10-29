@@ -167,25 +167,27 @@ appending to `action_approvals`; it never updates the SQL analytics endpoint.
 ## Vendor Contract Assurance
 
 **Current hosted status:** all four agent roles are registered and active in
-Foundry: original HWC v6, assurance orchestrator v8, and Contract/RFP analysts
-v5. All three acceptance turns have verified execution receipts. On
-2026-10-29 at 14:55-14:58 UTC, the complete hosted conversation passed using
-Responses 2.0. Original HWC v6 is unchanged.
+Foundry: original HWC v6, assurance orchestrator v9, and Contract/RFP analysts
+v6. On 2026-10-29, the corrected hosted acceptance passed at 22:34-22:40 UTC,
+followed by a fresh browser run through 22:45 UTC. Both verified all three turns,
+acknowledged reset, and new contexts afterward using Responses 2.0.
+Original HWC v6 is unchanged.
 MCP publishing succeeded at 13:04 UTC; all six triggers are indexed
 and both specialists performed authenticated retrieval.
 
-**PR #5 follow-up:** five review fixes now pass 49 focused tests and a
-corrected-code, real-model local browser demo (including reset and stale
-continuation recovery). Those fixes have not been redeployed to Azure because
-explicit redeployment approval was unavailable; v8/v5/v5 remains the earlier
-verified hosted baseline. Details are in the
+**PR #5 follow-up:** five review fixes pass 49 focused tests and are now deployed
+to the three existing hosted assurance agents with user approval. The corrected
+hosted and browser workflows pass; stale-continuation recovery also has separate
+local live and regression coverage. No infrastructure, permission, identity,
+model, or MCP allowlist changes were made. Details are in the
 [deployment record](deployment/contract-assurance/README.md).
 
 The verifier checked three discrepancies, matching EU residency, all eight
 citations, exact generated-document read/annotation lineage, and reused RFP
 context on the service-credit follow-up. Existing Application Insights contains
-94 metadata-only spans, including four linked comparison/handoff trace trees,
-eight successful specialist authorizations and eight successful MCP retrievals.
+330 metadata-only spans for the two completed runs, including ten linked
+comparison/handoff trees (134 business spans), 24 successful specialist sends
+and authorizations, and 20 successful MCP retrievals.
 No prompts, document bytes, bearer tokens, or model completions were exported
 by the manual trace path.
 
@@ -376,10 +378,12 @@ References checked against installed signatures and implementation:
 ### Verification Record
 
 **Hosted, 2026-10-29:** all three unchanged acceptance turns passed against
-orchestrator v8 / Contract v5 / RFP v5. Actual execution receipts verify the
-comparison, exact document lineage/read receipt, and stable reused RFP session.
-Application Insights confirms four linked business trace trees through delegates,
-specialists, MCP retrieval, and artifact handoff. All 39 focused regression,
+orchestrator v9 / Contract v6 / RFP v6 after the five PR review fixes.
+Actual execution receipts verify comparison, exact document lineage/read receipt,
+stable reused RFP session, acknowledged reset, and fresh contexts afterward.
+A fresh browser run also passed. Application Insights confirms ten linked
+successful business trees across both runs through delegates, specialists,
+MCP retrieval, and artifact handoff. All 49 focused regression,
 transport, and privacy tests pass. See the
 [deployment record](deployment/contract-assurance/README.md) for trace IDs.
 This verifies the tested hosted conversation, not durable state across restarts

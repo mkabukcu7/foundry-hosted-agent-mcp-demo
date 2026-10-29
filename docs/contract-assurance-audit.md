@@ -1,12 +1,14 @@
 # Contract Assurance Requirements Audit
 
 **Updated after hosted acceptance, 2026-10-29:** the complete three-turn workflow
-passed at 14:55-14:58 UTC against orchestrator v8 and Contract/RFP v5. Original
+passed again at 22:34-22:40 UTC against corrected orchestrator v9 and Contract/RFP v6,
+including reset and fresh contexts; a fresh browser run also passed. Original
 HWC v6 is unchanged. MCP publishing succeeded; authenticated specialist retrieval,
 exact generated-document read/annotation lineage, and stable reused RFP context
 are verified by actual execution receipts. Existing Application Insights contains
-94 allowlisted metadata spans, including four linked successful business trace
-trees. All 39 focused regression/transport/privacy tests pass.
+330 allowlisted metadata spans for the two completed runs, including ten linked
+successful business trees (134 spans), 24 successful sends/authorizations and
+20 successful retrievals. All 49 focused regression/transport/privacy tests pass.
 
 The [hosted deployment record](../deployment/contract-assurance/README.md)
 records explicit deployment/network/permission approvals, earlier publishing and
@@ -21,12 +23,14 @@ PR #5 follow-up: all five review findings are fixed and 49 focused tests pass.
 A real-model local browser demo of the corrected code verified all three turns,
 exact document lineage, reset, fresh contexts, and linked metadata traces.
 Actual local Host rebinding rejection and expired Responses continuation recovery
-were also verified. Corrected Azure redeployment awaits explicit approval;
-the earlier hosted results below remain evidence for v8/v5/v5, not these fixes.
+were also verified. The user subsequently approved hosted testing; the corrected
+source is deployed to v9/v6/v6 with unchanged identities/model/permissions.
+Both the hosted verifier and a fresh browser run passed the three turns, reset,
+and new contexts. Earlier v8/v5/v5 results remain historical baseline evidence.
 
 | Requirement | Status | Supporting implementation and evidence |
 | --- | --- | --- |
-| Separately hosted Foundry agents communicate | **HOSTED VERIFIED** | Three distinct `kind: hosted` services in [deployment manifest](../deployment/contract-assurance/azure.yaml); v8/v5/v5 completed real Responses calls with signed caller validation and MCP retrieval. |
+| Separately hosted Foundry agents communicate | **HOSTED VERIFIED** | Three distinct `kind: hosted` services in [deployment manifest](../deployment/contract-assurance/azure.yaml); v9/v6/v6 completed real Responses calls with signed caller validation and MCP retrieval. |
 | Preserve specialist context per parent/user | **HOSTED REUSE VERIFIED; OFFLINE ISOLATION TESTED** | [Session registry](../agent/assurance_runtime.py) scopes by trusted caller, parent, specialist. [Specialist server](../agent/contract_specialist.py) retains its AgentSession. Both hosted specialist tags stayed stable; follow-ups reported actual reuse. Restart/replica durability and authenticated multi-user frontend remain outside this run. |
 | Pass generated documents between agents | **HOSTED VERIFIED** | [Artifact boundary](../agent/assurance_artifacts.py) sends complete inline file bytes in structured Responses input. The RFP read receipt matches the findings ID/version/hash; annotation version 2 references those exact version-1 bytes. |
 | Complete real-client scenario and safe traces | **HOSTED VERIFIED** | [Real client](../frontend/assurance_client.py) and [verifier](../scripts/verify_contract_assurance.py) passed all three turns using execution receipts, all eight citations, lineage, and stable RFP reuse. Existing Insights verifies linked comparison/handoff, specialist, and retrieval spans without content export. |
