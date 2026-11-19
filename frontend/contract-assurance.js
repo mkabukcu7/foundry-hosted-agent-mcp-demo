@@ -10,7 +10,7 @@ let assuranceBusy = false;
 function renderAssuranceReceipts(receipts) {
   assuranceReceipts.replaceChildren();
   if (!receipts.length) {
-    assuranceReceipts.textContent = "No execution receipt; integration unverified.";
+    assuranceReceipts.textContent = "No execution activity exposed; integration unverified.";
     return;
   }
   for (const receipt of receipts) {
@@ -21,6 +21,9 @@ function renderAssuranceReceipts(receipts) {
       row.textContent = `Comparison completed | Contract context: ${contract?.session_reused ? "reused" : "new"} (${contract?.session_tag || "unverified"}) | RFP context: ${rfp?.session_reused ? "reused" : "new"} (${rfp?.session_tag || "unverified"})`;
     } else if (receipt.status === "document_validated") {
       row.textContent = `Document validated${receipt.operation_replayed ? " (earlier receipt replayed; no new analyst call)" : ""} | ${receipt.findings?.artifact_id} v${receipt.findings?.version} -> v${receipt.annotated?.version} | Read version: ${receipt.read_artifact?.version} | Parent SHA-256: ${receipt.annotation_parent?.sha256} | SHA-256: ${receipt.annotated?.sha256}`;
+    } else if (receipt.status === "harness_activity") {
+      const target = receipt.name || receipt.tool_name || receipt.server_label || receipt.id || "managed runtime";
+      row.textContent = `${receipt.sequence}. Copilot Harness: ${receipt.activity} | ${target}${receipt.status ? ` | ${receipt.status}` : ""}`;
     } else {
       row.textContent = receipt.status;
     }
@@ -45,7 +48,7 @@ async function assuranceRequest(prompt, reset = false) {
   if (assuranceBusy) return;
   assuranceBusy = true;
   document.querySelectorAll("button").forEach(button => { button.disabled = true; });
-  assuranceStatus.textContent = reset ? "Resetting context..." : "Consulting specialists...";
+  assuranceStatus.textContent = reset ? "Resetting context..." : "Running assurance workflow...";
   if (!reset) assuranceMessage("user", prompt);
   try {
     if (!assuranceSession) {
@@ -64,7 +67,8 @@ async function assuranceRequest(prompt, reset = false) {
     if (reset) assuranceConversation.replaceChildren();
     assuranceMessage("agent", result.output_text || "Conversation reset.");
     renderAssuranceReceipts(result.execution_receipts || []);
-    assuranceStatus.textContent = result.execution_receipts?.length ? "Execution receipt received" : "Response received; execution unverified";
+    const backend = result.backend === "harness" ? "Copilot Harness" : "Hosted orchestrator";
+    assuranceStatus.textContent = `${backend} response received${result.execution_receipts?.length ? " with execution activity" : "; no tool activity exposed"}`;
     assuranceInput.value = "";
   } catch (error) {
     assuranceMessage("agent", error.message, true);
