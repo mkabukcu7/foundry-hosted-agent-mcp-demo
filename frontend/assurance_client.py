@@ -1,4 +1,4 @@
-"""Server-owned browser sessions for the real Responses orchestrator only."""
+"""Server-owned browser sessions for real hosted or Copilot Harness agents."""
 
 import asyncio
 import ast
@@ -51,14 +51,16 @@ def execution_receipts(response):
 class BrowserSession:
     owner: str
     previous_response_id: str | None = None
+    harness_conversation_id: str | None = None
     unresolved: bool = False
     lock: Lock = field(default_factory=Lock)
 
 
 class AssuranceGateway:
-    def __init__(self):
+    def __init__(self, harness_client=None):
         self.sessions = {}
         self.lock = Lock()
+        self.harness_client = harness_client
 
     def create_session(self, owner):
         session_id = secrets.token_urlsafe(32)
@@ -73,6 +75,40 @@ class AssuranceGateway:
             raise PermissionError("This assurance session is not owned by this browser.")
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 8000:
             raise ValueError("Enter a question of at most 8000 characters.")
+        backend = os.environ.get("ASSURANCE_BACKEND", "hosted").strip().lower()
+        if backend == "harness":
+            return self._respond_harness(session, prompt, reset)
+        if backend != "hosted":
+            raise ValueError("ASSURANCE_BACKEND must be 'hosted' or 'harness'.")
+        return self._respond_hosted(session, prompt, reset)
+
+    def _respond_harness(self, session, prompt, reset):
+        with session.lock:
+            if session.unresolved:
+                raise RuntimeError("A previous hosted call has an unresolved outcome. Retry the same request or reset after investigating.")
+            if reset:
+                session.harness_conversation_id = None
+                session.previous_response_id = None
+                return {
+                    "output_text": "Harness conversation reset.",
+                    "mode": "live",
+                    "backend": "harness",
+                    "reset": True,
+                    "execution_receipts": [{"status": "contexts_reset"}],
+                }
+            session.unresolved = True
+        if self.harness_client is None:
+            from frontend.harness_client import HarnessAssuranceClient
+            self.harness_client = HarnessAssuranceClient()
+        result = self.harness_client.respond(prompt, session.harness_conversation_id)
+        with session.lock:
+            session.harness_conversation_id = result["conversation_id"]
+            session.previous_response_id = result["response_id"]
+            session.unresolved = False
+        result["reset"] = False
+        return result
+
+    def _respond_hosted(self, session, prompt, reset):
         url = os.environ.get("CONTRACT_ORCHESTRATOR_BASE_URL", "").strip()
         if not url:
             raise RuntimeError("Live orchestrator is not configured. No mock fallback is available.")
@@ -87,7 +123,7 @@ class AssuranceGateway:
                 options["previous_response_id"] = session.previous_response_id
             if reset:
                 if session.previous_response_id is None:
-                    return {"output_text": "Conversation reset.", "mode": "live", "reset": True}
+                    return {"output_text": "Conversation reset.", "mode": "live", "backend": "hosted", "reset": True}
                 options["input"] = "Reset both specialist contexts now."
                 options["tool_choice"] = {"type": "function", "name": "reset_assurance_context"}
             session.unresolved = True
@@ -99,5 +135,5 @@ class AssuranceGateway:
                 raise RuntimeError("Reset was not confirmed by an execution receipt. Context has not been silently discarded.")
             session.previous_response_id = None if reset else response.id
             session.unresolved = False
-            return {"output_text": response.output_text, "mode": "live", "reset": reset,
-                    "execution_receipts": receipts}
+            return {"output_text": response.output_text, "mode": "live", "backend": "hosted",
+                    "reset": reset, "execution_receipts": receipts}
