@@ -1,0 +1,2 @@
+-r requirements-contract-assurance.txt
+azure-ai-projects>=2.7,<3
